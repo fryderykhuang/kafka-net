@@ -28,6 +28,8 @@ namespace KafkaNet
         private int _ensureOneThread;
         private Topic _topic;
 
+        private static readonly Message EndOfTopic = new Message();
+
         public Consumer(ConsumerOptions options, params OffsetPosition[] positions)
         {
             _options = options;
@@ -50,7 +52,18 @@ namespace KafkaNet
         {
             _options.Log.DebugFormat("Consumer: Beginning consumption of topic: {0}", _options.Topic);
             EnsurePartitionPollingThreads();
-            return _fetchResponseQueue.GetConsumingEnumerable(cancellationToken ?? CancellationToken.None);
+            int endOfTopicCount = 0;
+            foreach (var message in _fetchResponseQueue.GetConsumingEnumerable(cancellationToken ?? CancellationToken.None))
+            {
+                if (Object.ReferenceEquals(message, EndOfTopic))
+                {
+                    endOfTopicCount++;
+                    if (endOfTopicCount == _partitionOffsetIndex.Count)
+                        yield break; // at the end of the last topic
+                    continue; // filter out EndOfTopic messages
+                }
+                yield return message;
+            }
         }
 
         /// <summary>
@@ -154,22 +167,32 @@ namespace KafkaNet
                             {
                                 var response = responses.FirstOrDefault(); //we only asked for one response
 
-                                if (response != null && response.Messages.Count > 0)
+                                if (response != null)
                                 {
                                     HandleResponseErrors(fetch, response);
 
-                                    foreach (var message in response.Messages)
+                                    if (response.Messages.Count > 0)
                                     {
-                                        _fetchResponseQueue.Add(message, _disposeToken.Token);
+                                        foreach (var message in response.Messages)
+                                        {
+                                            _fetchResponseQueue.Add(message, _disposeToken.Token);
 
-                                        if (_disposeToken.IsCancellationRequested) return;
+                                            if (_disposeToken.IsCancellationRequested) return;
+                                        }
+
+                                        var nextOffset = response.Messages.Max(x => x.Meta.Offset) + 1;
+                                        _partitionOffsetIndex.AddOrUpdate(partitionId, i => nextOffset, (i, l) => nextOffset);
+
+                                        // sleep is not needed if responses were received
+                                        continue;
                                     }
-
-                                    var nextOffset = response.Messages.Max(x => x.Meta.Offset) + 1;
-                                    _partitionOffsetIndex.AddOrUpdate(partitionId, i => nextOffset, (i, l) => nextOffset);
-
-                                    // sleep is not needed if responses were received
-                                    continue;
+                                    else if (_options.BackoffInterval.TotalMilliseconds == 0 && _options.MaxWaitTimeForMinimumBytes.TotalMilliseconds == 0)
+                                    {
+                                        // we've reached the end of the partition and this consumer's configuration indicates that
+                                        // blocking is not expected.  Send the EndOfTopic message
+                                        _fetchResponseQueue.Add(EndOfTopic);
+                                        return;
+                                    }
                                 }
                             }
 
