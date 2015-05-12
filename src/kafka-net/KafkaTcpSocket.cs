@@ -189,8 +189,10 @@ namespace KafkaNet
 
                 if (exception != null) throw exception;
 
-                if (sendDataReady.IsCompleted) writeTask = ProcessSentTasksAsync(netStream, _sendTaskQueue.Pop());
-                if (readDataReady.IsCompleted) readTask = ProcessReadTaskAsync(netStream, _readTaskQueue.Pop());
+                if (sendDataReady.IsCompleted)
+                    writeTask = ProcessSentTasksAsync(netStream, _sendTaskQueue.Pop());
+                if (readDataReady.IsCompleted)
+                    readTask = ProcessReadTaskAsync(netStream, _readTaskQueue.Pop());
             }
         }
 
@@ -279,7 +281,9 @@ namespace KafkaNet
 
                     if (OnWriteToSocketAttempt != null) OnWriteToSocketAttempt(sendTask.Payload);
 
-                    await netStream.WriteAsync(sendTask.Payload.Buffer, 0, sendTask.Payload.Buffer.Length);
+                    Trace.WriteLine(string.Format("==> [{0}]", sendTask.Payload.Buffer.Length));
+                    netStream.Write(sendTask.Payload.Buffer, 0, sendTask.Payload.Buffer.Length);
+                    netStream.Flush();
 
                     sendTask.Tcp.TrySetResult(sendTask.Payload);
                 }

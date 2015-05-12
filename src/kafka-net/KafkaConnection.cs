@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using KafkaNet.Common;
 using KafkaNet.Model;
 using KafkaNet.Protocol;
+using System.Diagnostics;
 
 namespace KafkaNet
 {
@@ -104,7 +105,12 @@ namespace KafkaNet
                     try
                     {
                         AddAsyncRequestItemToResponseQueue(asyncRequest);
-                        await _client.WriteAsync(request.Encode())
+
+                        var encoded = request.Encode();
+                        Dumper.Dump("REQUEST", request);
+                        Trace.WriteLine(string.Format(" SIZE={0}", encoded.Buffer.Length));
+
+                        await _client.WriteAsync(encoded)
                             .ContinueWith(t => asyncRequest.MarkRequestAsSent(t.Exception, _responseTimeoutMS, TriggerMessageTimeout))
                             .ConfigureAwait(false);
                     }
@@ -115,7 +121,10 @@ namespace KafkaNet
                 
                     var response = await asyncRequest.ReceiveTask.Task.ConfigureAwait(false);
 
-                    return request.Decode(response).ToList();
+                    var resultList = request.Decode(response).ToList();
+                    foreach (var result in resultList)
+                        Dumper.Dump("RESULT", result);
+                    return resultList;
                 }
             }
 
@@ -165,8 +174,9 @@ namespace KafkaNet
                                 var messageSizeResult = await _client.ReadAsync(4, _disposeToken.Token).ConfigureAwait(false);
                                 var messageSize = messageSizeResult.ToInt32();
 
-                                _log.DebugFormat("Received message of size: {0} From: {1}", messageSize, _client.Endpoint);
                                 var message = await _client.ReadAsync(messageSize, _disposeToken.Token).ConfigureAwait(false);
+                                var correlationId = message.Take(4).ToArray().ToInt32();
+                                _log.DebugFormat("Received message of size: {0} for correlation id {2} From: {1}", messageSize, _client.Endpoint, correlationId);
 
                                 CorrelatePayloadToRequest(message);
                             }
