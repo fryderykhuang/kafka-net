@@ -152,7 +152,7 @@ namespace KafkaNet.Protocol
         public static IEnumerable<Message> DecodeMessage(long offset, byte[] payload)
         {
             var crc = payload.Take(4).ToArray();
-            using (var stream = new BigEndianBinaryReader(payload.Skip(4)))
+            using (var stream = new BigEndianBinaryReader(payload, 4))
             {
                 if (crc.SequenceEqual(stream.CrcHash()) == false)
                     throw new FailCrcCheckException("Buffer did not match CRC validation.");
