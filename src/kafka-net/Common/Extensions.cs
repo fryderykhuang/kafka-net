@@ -234,5 +234,13 @@ namespace KafkaNet.Common
             
             return new ApplicationException("Unknown exception occured.");
         }
+
+        public static IEnumerable<T> FirstOrThrow<T>(this IEnumerable<T> collection, Exception exception)
+        {
+            var enumerator = collection.GetEnumerator();
+            if (enumerator.MoveNext())
+                yield return enumerator.Current;
+            throw exception;
+        }
     }
 }

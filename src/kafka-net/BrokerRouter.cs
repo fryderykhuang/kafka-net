@@ -1,4 +1,5 @@
-﻿using System.Collections.Concurrent;
+﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using KafkaNet.Model;
@@ -66,6 +67,11 @@ namespace KafkaNet
             if (partition == null) throw new InvalidPartitionException(string.Format("The topic:{0} does not have a partitionId:{1} defined.", topic, partitionId));
 
             return GetCachedRoute(topicMetadata.Name, partition);
+        }
+
+        public IKafkaConnection CloneConnectionForFetch(IKafkaConnection connection)
+        {
+            return _kafkaOptions.KafkaConnectionFactory.Create(connection.Endpoint, TimeSpan.MaxValue, _kafkaOptions.Log, _kafkaOptions.MaximumReconnectionTimeout);
         }
 
         /// <summary>

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using KafkaNet.Model;
+using System.Threading;
 
 namespace KafkaNet
 {
@@ -22,7 +23,7 @@ namespace KafkaNet
         /// </summary>
         /// <param name="payload">The raw data to send to the connected endpoint.</param>
         /// <returns>Task representing the future success or failure of query.</returns>
-        Task SendAsync(KafkaDataPayload payload);
+        Task SendAsync(KafkaDataPayload payload, CancellationToken cancel = default(CancellationToken));
 
         /// <summary>
         /// Send a specific IKafkaRequest to the connected endpoint.
@@ -30,6 +31,6 @@ namespace KafkaNet
         /// <typeparam name="T">The type of the KafkaResponse expected from the request being sent.</typeparam>
         /// <param name="request">The KafkaRequest to send to the connected endpoint.</param>
         /// <returns>Task representing the future responses from the sent request.</returns>
-        Task<List<T>> SendAsync<T>(IKafkaRequest<T> request);
+        Task<List<T>> SendAsync<T>(IKafkaRequest<T> request, CancellationToken cancel = default(CancellationToken));
     }
 }

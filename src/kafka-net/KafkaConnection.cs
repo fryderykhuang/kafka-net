@@ -66,19 +66,9 @@ namespace KafkaNet
         /// Send raw byte[] payload to the kafka server with a task indicating upload is complete.
         /// </summary>
         /// <param name="payload">kafka protocol formatted byte[] payload</param>
-        /// <returns>Task which signals the completion of the upload of data to the server.</returns>
-        public Task SendAsync(KafkaDataPayload payload)
-        {
-            return _client.WriteAsync(payload);
-        }
-
-        /// <summary>
-        /// Send raw byte[] payload to the kafka server with a task indicating upload is complete.
-        /// </summary>
-        /// <param name="payload">kafka protocol formatted byte[] payload</param>
         /// <param name="token">Cancellation token used to cancel the transfer.</param>
         /// <returns>Task which signals the completion of the upload of data to the server.</returns>
-        public Task SendAsync(KafkaDataPayload payload, CancellationToken token)
+        public Task SendAsync(KafkaDataPayload payload, CancellationToken token = default(CancellationToken))
         {
             return _client.WriteAsync(payload, token);
         }
@@ -90,7 +80,7 @@ namespace KafkaNet
         /// <typeparam name="T">A Kafka response object return by decode function.</typeparam>
         /// <param name="request">The IKafkaRequest to send to the kafka servers.</param>
         /// <returns></returns>
-        public async Task<List<T>> SendAsync<T>(IKafkaRequest<T> request)
+        public async Task<List<T>> SendAsync<T>(IKafkaRequest<T> request, CancellationToken cancel = default(CancellationToken))
         {
             //assign unique correlationId
             request.CorrelationId = NextCorrelationId();
@@ -104,8 +94,17 @@ namespace KafkaNet
                     try
                     {
                         AddAsyncRequestItemToResponseQueue(asyncRequest);
-                        await _client.WriteAsync(request.Encode())
-                            .ContinueWith(t => asyncRequest.MarkRequestAsSent(t.Exception, _responseTimeoutMS, TriggerMessageTimeout))
+                        await _client.WriteAsync(request.Encode(), cancel)
+                            .ContinueWith(t =>
+                            {
+                                asyncRequest.MarkRequestAsSent(t.Exception, _responseTimeoutMS, TriggerMessageTimeout);
+                                cancel.Register(()=>
+                                {
+                                    AsyncRequestItem removed;
+                                    _requestIndex.TryRemove(asyncRequest.CorrelationId, out removed);
+                                    asyncRequest.ReceiveTask.TrySetCanceled();
+                                });
+                            })
                             .ConfigureAwait(false);
                     }
                     catch (OperationCanceledException)
@@ -121,7 +120,7 @@ namespace KafkaNet
 
 
             //no response needed, just send
-            await _client.WriteAsync(request.Encode()).ConfigureAwait(false);
+            await _client.WriteAsync(request.Encode(), cancel).ConfigureAwait(false);
             //TODO should this return a response of success for request?
             return new List<T>();
         }
@@ -279,8 +278,11 @@ namespace KafkaNet
                     throw ex;
                 }
 
-                _cancellationTokenSource.CancelAfter(timeout);
-                _cancellationTokenSource.Token.Register(() => timeoutFunction(this));
+                if (timeout != TimeSpan.MaxValue)
+                {
+                    _cancellationTokenSource.CancelAfter(timeout);
+                    _cancellationTokenSource.Token.Register(() => timeoutFunction(this));
+                }
             }
 
 
