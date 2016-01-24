@@ -183,7 +183,7 @@ namespace KafkaNet
 
                         batch = await _asyncCollection.TakeAsync(BatchSize, BatchDelayTime, _stopToken.Token).ConfigureAwait(false);
                     }
-                    catch (OperationCanceledException ex)
+                    catch (OperationCanceledException)
                     {
                         //TODO log that the operation was canceled, this only happens during a dispose
                     }
