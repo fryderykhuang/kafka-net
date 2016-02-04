@@ -71,7 +71,17 @@ namespace KafkaNet
 
         public IKafkaConnection CloneConnectionForFetch(IKafkaConnection connection)
         {
-            return _kafkaOptions.KafkaConnectionFactory.Create(connection.Endpoint, TimeSpan.MaxValue, _kafkaOptions.Log, _kafkaOptions.MaximumReconnectionTimeout);
+            return CloneConnection(connection, TimeSpan.MaxValue, _kafkaOptions.MaximumReconnectionTimeout);
+        }
+
+        public IKafkaConnection CloneConnectionForProduce(IKafkaConnection connection)
+        {
+            return CloneConnection(connection, TimeSpan.MaxValue, _kafkaOptions.MaximumReconnectionTimeout);
+        }
+
+        public IKafkaConnection CloneConnection(IKafkaConnection connection, TimeSpan responseTimeoutMs, TimeSpan? maximumReconnectionTimeout = null)
+        {
+            return _kafkaOptions.KafkaConnectionFactory.Create(connection.Endpoint, responseTimeoutMs, _kafkaOptions.Log, maximumReconnectionTimeout);
         }
 
         /// <summary>

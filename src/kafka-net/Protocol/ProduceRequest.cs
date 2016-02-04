@@ -28,7 +28,7 @@ namespace KafkaNet.Protocol
         /// <summary>
         /// Collection of payloads to post to kafka
         /// </summary>
-        public List<Payload> Payload = new List<Payload>();
+        public IEnumerable<Payload> Payload;
 
 
         public KafkaDataPayload Encode()
@@ -45,9 +45,10 @@ namespace KafkaNet.Protocol
         private KafkaDataPayload EncodeProduceRequest(ProduceRequest request)
         {
             int totalCompressedBytes = 0;
-            if (request.Payload == null) request.Payload = new List<Payload>();
 
-            var groupedPayloads = (from p in request.Payload
+            var payload = request.Payload ?? new Payload[0];
+
+            var groupedPayloads = (from p in payload
                                    group p by new
                                    {
                                        p.Topic,
@@ -88,7 +89,7 @@ namespace KafkaNet.Protocol
                 {
                     Buffer = message.Payload(),
                     CorrelationId = request.CorrelationId,
-                    MessageCount = request.Payload.Sum(x => x.Messages.Count)
+                    MessageCount = request.Payload.Sum(x => x.Messages.Length)
                 };
                 StatisticsTracker.RecordProduceRequest(result.MessageCount, result.Buffer.Length, totalCompressedBytes);
                 return result;

@@ -251,14 +251,14 @@ namespace KafkaNet
                         Codec = group.Key.Codec,
                         Topic = group.Key.Topic,
                         Partition = group.Key.Route.PartitionId,
-                        Messages = group.Select(x => x.TopicMessage.Message).ToList()
+                        Messages = group.Select(x => x.TopicMessage.Message).ToArray()
                     };
 
                     var request = new ProduceRequest
                     {
                         Acks = ackLevelBatch.Key.Acks,
                         TimeoutMS = (int)ackLevelBatch.Key.Timeout.TotalMilliseconds,
-                        Payload = new List<Payload> { payload }
+                        Payload = new Payload[] { payload }
                     };
 
                     await _semaphoreMaximumAsync.WaitAsync(cancellationToken).ConfigureAwait(false);
