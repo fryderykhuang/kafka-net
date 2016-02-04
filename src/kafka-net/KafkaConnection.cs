@@ -88,7 +88,14 @@ namespace KafkaNet
             //if response is expected, register a receive data task and send request
             if (request.ExpectResponse)
             {
+                var correlationId = request.CorrelationId;
                 using (var asyncRequest = new AsyncRequestItem(request.CorrelationId))
+                using (var registration = cancel.Register(() =>
+                {
+                    AsyncRequestItem removed;
+                    _requestIndex.TryRemove(correlationId, out removed);
+                    asyncRequest.ReceiveTask.TrySetCanceled();
+                }))
                 {
 
                     try
@@ -98,12 +105,6 @@ namespace KafkaNet
                             .ContinueWith(t =>
                             {
                                 asyncRequest.MarkRequestAsSent(t.Exception, _responseTimeoutMS, TriggerMessageTimeout);
-                                cancel.Register(()=>
-                                {
-                                    AsyncRequestItem removed;
-                                    _requestIndex.TryRemove(asyncRequest.CorrelationId, out removed);
-                                    asyncRequest.ReceiveTask.TrySetCanceled();
-                                });
                             })
                             .ConfigureAwait(false);
                     }
@@ -169,6 +170,9 @@ namespace KafkaNet
 
                                 CorrelatePayloadToRequest(message);
                             }
+                            catch (OperationCanceledException)
+                            {
+                            }
                             catch (Exception ex)
                             {
                                 //don't record the exception if we are disposing
@@ -195,7 +199,7 @@ namespace KafkaNet
             AsyncRequestItem asyncRequest;
             if (_requestIndex.TryRemove(correlationId, out asyncRequest))
             {
-                asyncRequest.ReceiveTask.SetResult(payload);
+                asyncRequest.ReceiveTask.TrySetResult(payload);
             }
             else
             {

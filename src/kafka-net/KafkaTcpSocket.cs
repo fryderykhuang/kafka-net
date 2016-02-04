@@ -188,6 +188,8 @@ namespace KafkaNet
 
         private async Task ProcessReadTaskAsync(NetworkStream netStream, SocketPayloadReadTask readTask)
         {
+            if (readTask == null)
+                return;
             using (readTask)
             {
                 try
