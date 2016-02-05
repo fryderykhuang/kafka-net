@@ -112,7 +112,7 @@ namespace KafkaNet
                 var route = router.SelectBrokerRoute(topicName, partitionId);
                 using (var connection = router.CloneConnectionForFetch(route.Connection))
                 {
-                    bool end = await ConsumePartitionAsync(connection, topicName, partitionId, cursor, toOffsetExcl, onNext, onComplete, onError, cancel);
+                    bool end = await ConsumePartitionAsync(connection, topicName, partitionId, cursor, toOffsetExcl, onNext, onComplete, onError, cancel).ConfigureAwait(false);
                     if (end)
                         break;
                 }

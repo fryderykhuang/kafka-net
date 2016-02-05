@@ -357,7 +357,7 @@ namespace KafkaNet
             using (_client)
             using (_socketTask)
             {
-                _socketTask.SafeWait(TimeSpan.FromSeconds(30));
+                _socketTask.SafeWait(TimeSpan.FromSeconds(5));
             }
         }
     }

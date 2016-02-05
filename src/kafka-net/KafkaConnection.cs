@@ -199,7 +199,11 @@ namespace KafkaNet
             AsyncRequestItem asyncRequest;
             if (_requestIndex.TryRemove(correlationId, out asyncRequest))
             {
-                asyncRequest.ReceiveTask.TrySetResult(payload);
+                var receiveTask = asyncRequest.ReceiveTask;
+                Task.Run(() =>
+                {
+                    receiveTask.TrySetResult(payload);
+                });
             }
             else
             {
