@@ -104,9 +104,6 @@ namespace KafkaNet
                 var topics = router.GetTopicMetadata(topicName);
                 if (topics.Count <= 0)
                     throw new ApplicationException(string.Format("Unable to get metadata for topic:{0}.", topicName));
-                var partition = topics.First().Partitions
-                    .Where(p => p.PartitionId == partitionId)
-                    .First();
 
                 //make request and post to queue
                 var route = router.SelectBrokerRoute(topicName, partitionId);

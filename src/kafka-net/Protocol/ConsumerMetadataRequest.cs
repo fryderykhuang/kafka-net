@@ -42,7 +42,7 @@ namespace KafkaNet.Protocol
         {
             using (var stream = new BigEndianBinaryReader(data))
             {
-                var correlationId = stream.ReadInt32();
+                stream.ReadInt32(); // correlation id
 
                 var response = new ConsumerMetadataResponse
                     {

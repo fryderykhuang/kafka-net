@@ -15,7 +15,7 @@ namespace KafkaNet.Statistics
     {
         public static event Action<StatisticsSummary> OnStatisticsHeartbeat;
 
-        private static readonly IScheduledTimer HeartbeatTimer;
+        public static readonly IScheduledTimer HeartbeatTimer;
         private static readonly Gauges Gauges = new Gauges();
         private static readonly ConcurrentCircularBuffer<ProduceRequestStatistic> ProduceRequestStatistics = new ConcurrentCircularBuffer<ProduceRequestStatistic>(500);
         private static readonly ConcurrentCircularBuffer<NetworkWriteStatistic> CompletedNetworkWriteStatistics = new ConcurrentCircularBuffer<NetworkWriteStatistic>(500);
