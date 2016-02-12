@@ -46,13 +46,13 @@ namespace KafkaNet
 
         public static async Task<long> GetPartitionHeadOffsetAsync(BrokerRouter router, string topic, int partitionId)
         {
-            var offsets = await GetPartitionOffsetAsync(router, topic, partitionId, 1, HEAD);
+            var offsets = await GetPartitionOffsetAsync(router, topic, partitionId, 1, HEAD).ConfigureAwait(false);
             return offsets.Offsets.FirstOrDefault();
         }
 
         public static async Task<long> GetPartitionTailOffsetAsync(BrokerRouter router, string topic, int partitionId)
         {
-            var offsets = await GetPartitionOffsetAsync(router, topic, partitionId, 1, TAIL);
+            var offsets = await GetPartitionOffsetAsync(router, topic, partitionId, 1, TAIL).ConfigureAwait(false);
             return offsets.Offsets.FirstOrDefault();
         }
 
