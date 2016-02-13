@@ -2,6 +2,7 @@
 using System.Threading;
 using System.Threading.Tasks;
 using KafkaNet.Model;
+using Buffer;
 
 namespace KafkaNet
 {
@@ -17,7 +18,7 @@ namespace KafkaNet
         /// </summary>
         /// <param name="readSize">The size in bytes to receive from server.</param>
         /// <returns>Returns a byte[] array with the size of readSize.</returns>
-        Task<byte[]> ReadAsync(int readSize);
+        Task<Slice> ReadAsync(int readSize);
 
         /// <summary>
         /// Read a certain byte array size return only when all bytes received.
@@ -25,7 +26,7 @@ namespace KafkaNet
         /// <param name="readSize">The size in bytes to receive from server.</param>
         /// <param name="cancellationToken">A cancellation token which will cancel the request.</param>
         /// <returns>Returns a byte[] array with the size of readSize.</returns>
-        Task<byte[]> ReadAsync(int readSize, CancellationToken cancellationToken);
+        Task<Slice> ReadAsync(int readSize, CancellationToken cancellationToken);
 
         /// <summary>
         /// Write the buffer data to the server.

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using KafkaNet.Protocol;
+using Buffer;
 
 namespace KafkaNet
 {
@@ -36,6 +37,6 @@ namespace KafkaNet
         /// </summary>
         /// <param name="payload">Buffer data returned by Kafka servers.</param>
         /// <returns></returns>
-        IEnumerable<T> Decode(byte[] payload);
+        IEnumerable<T> Decode(Slice payload);
     }
 }

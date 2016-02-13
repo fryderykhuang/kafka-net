@@ -9,6 +9,7 @@ using KafkaNet.Common;
 using KafkaNet.Model;
 using KafkaNet.Protocol;
 using KafkaNet.Statistics;
+using Buffer;
 
 namespace KafkaNet
 {
@@ -80,7 +81,7 @@ namespace KafkaNet
         /// </summary>
         /// <param name="readSize">The size in bytes to receive from server.</param>
         /// <returns>Returns a byte[] array with the size of readSize.</returns>
-        public Task<byte[]> ReadAsync(int readSize)
+        public Task<Slice> ReadAsync(int readSize)
         {
             return EnqueueReadTask(readSize, CancellationToken.None);
         }
@@ -91,7 +92,7 @@ namespace KafkaNet
         /// <param name="readSize">The size in bytes to receive from server.</param>
         /// <param name="cancellationToken">A cancellation token which will cancel the request.</param>
         /// <returns>Returns a byte[] array with the size of readSize.</returns>
-        public Task<byte[]> ReadAsync(int readSize, CancellationToken cancellationToken)
+        public Task<Slice> ReadAsync(int readSize, CancellationToken cancellationToken)
         {
             return EnqueueReadTask(readSize, cancellationToken);
         }
@@ -116,7 +117,7 @@ namespace KafkaNet
             return sendTask.Tcp.Task;
         }
 
-        private Task<byte[]> EnqueueReadTask(int readSize, CancellationToken cancellationToken)
+        private Task<Slice> EnqueueReadTask(int readSize, CancellationToken cancellationToken)
         {
             var readTask = new SocketPayloadReadTask(readSize, cancellationToken);
             _readTaskQueue.Add(readTask);
@@ -196,17 +197,16 @@ namespace KafkaNet
                 {
                     StatisticsTracker.IncrementGauge(StatisticGauge.ActiveReadOperation);
                     var readSize = readTask.ReadSize;
-                    var result = new List<byte>(readSize);
+                    var result = new ProtoSlice(readSize);
                     var bytesReceived = 0;
-
+                    var cursor = 0;
                     while (bytesReceived < readSize)
                     {
                         readSize = readSize - bytesReceived;
-                        var buffer = new byte[readSize];
 
                         if (OnReadFromSocketAttempt != null) OnReadFromSocketAttempt(readSize);
 
-                        bytesReceived = await netStream.ReadAsync(buffer, 0, readSize, readTask.CancellationToken)
+                        bytesReceived = await result.ReadFromAsync(netStream, 0, readSize, readTask.CancellationToken)
                             .WithCancellation(readTask.CancellationToken).ConfigureAwait(false);
 
                         if (OnBytesReceived != null) OnBytesReceived(bytesReceived);
@@ -220,10 +220,10 @@ namespace KafkaNet
                             }
                         }
 
-                        result.AddRange(buffer.Take(bytesReceived));
+                        cursor += bytesReceived;
                     }
 
-                    readTask.Tcp.TrySetResult(result.ToArray());
+                    readTask.Tcp.TrySetResult(result.Finish());
                 }
                 catch (Exception ex)
                 {
@@ -365,7 +365,7 @@ namespace KafkaNet
     class SocketPayloadReadTask : IDisposable
     {
         public CancellationToken CancellationToken { get; private set; }
-        public TaskCompletionSource<byte[]> Tcp { get; set; }
+        public TaskCompletionSource<Slice> Tcp { get; set; }
         public int ReadSize { get; set; }
 
         private readonly CancellationTokenRegistration _cancellationTokenRegistration;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Buffer;
 
 namespace KafkaNet.Common
 {
@@ -36,6 +37,12 @@ namespace KafkaNet.Common
         public KafkaMessagePacker Pack(Int64 ints)
         {
             _stream.Write(ints);
+            return this;
+        }
+
+        public KafkaMessagePacker Pack(Slice slice, StringPrefixEncoding encoding = StringPrefixEncoding.Int32)
+        {
+            _stream.Write(slice, encoding);
             return this;
         }
 
@@ -90,10 +97,10 @@ namespace KafkaNet.Common
 
             //calculate the crc
             var crc = Crc32Provider.ComputeHash(buffer, IntegerByteSize, buffer.Length);
-            buffer[0] = crc[0];
-            buffer[1] = crc[1];
-            buffer[2] = crc[2];
-            buffer[3] = crc[3];
+            buffer[0] = (byte)(crc >> 24);
+            buffer[1] = (byte)((crc >> 16) & 0xFF);
+            buffer[2] = (byte)((crc >> 8) & 0xFF);
+            buffer[3] = (byte)(crc & 0xFF);
 
             return buffer;
         }

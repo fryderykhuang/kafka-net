@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Security.Cryptography;
 using KafkaNet.Common;
+using Buffer;
 
 namespace KafkaNet.Protocol
 {
@@ -45,11 +46,11 @@ namespace KafkaNet.Protocol
         /// <summary>
         /// Key value used for routing message to partitions.
         /// </summary>
-        public byte[] Key { get; set; }
+        public Slice Key { get; set; }
         /// <summary>
         /// The message body contents.  Can contain compress message set.
         /// </summary>
-        public byte[] Value { get; set; }
+        public Slice Value { get; set; }
 
         /// <summary>
         /// Construct an empty message.
@@ -64,8 +65,8 @@ namespace KafkaNet.Protocol
         /// <param name="value">The main content data of this message.</param>
         public Message(string value, string key = null)
         {
-            Key = key == null ? null : key.ToBytes();
-            Value = value.ToBytes();
+            Key = key == null ? default(Slice) : new Slice(key);
+            Value = new Slice(value);
         }
 
         /// <summary>
@@ -73,7 +74,7 @@ namespace KafkaNet.Protocol
         /// </summary>
         /// <param name="messages">The collection of messages to encode together.</param>
         /// <returns>Encoded byte[] representing the collection of messages.</returns>
-        public static byte[] EncodeMessageSet(IEnumerable<Message> messages)
+        public static Slice EncodeMessageSet(IEnumerable<Message> messages)
         {
             using (var stream = new KafkaMessagePacker())
             {
@@ -82,8 +83,8 @@ namespace KafkaNet.Protocol
                     stream.Pack(InitialMessageOffset)
                         .Pack(EncodeMessage(message));
                 }
-
-                return stream.PayloadNoLength();
+                var payload = stream.PayloadNoLength();
+                return Slice.CopyFrom(payload, 0, payload.Length);
             }
         }
 
@@ -92,7 +93,7 @@ namespace KafkaNet.Protocol
         /// </summary>
         /// <param name="messageSet">The byte[] encode as a message set from kafka.</param>
         /// <returns>Enumerable representing stream of messages decoded from byte[]</returns>
-        public static IEnumerable<Message> DecodeMessageSet(byte[] messageSet)
+        public static IEnumerable<Message> DecodeMessageSet(Slice messageSet)
         {
             using (var stream = new BigEndianBinaryReader(messageSet))
             {
@@ -130,15 +131,18 @@ namespace KafkaNet.Protocol
         /// Format:
         /// Crc (Int32), MagicByte (Byte), Attribute (Byte), Key (Byte[]), Value (Byte[])
         /// </remarks>
-        public static byte[] EncodeMessage(Message message)
+        public static Slice EncodeMessage(Message message)
         {
             using(var stream = new KafkaMessagePacker())
             {
-                return stream.Pack(message.MagicNumber)
+                // TODO: do not copy... we know the size here (probably need to replace MessagePacker and the BinaryWriter subclass
+                byte[] payload = stream
+                    .Pack(message.MagicNumber)
                     .Pack(message.Attribute)
                     .Pack(message.Key)
                     .Pack(message.Value)
                     .CrcPayload();
+                return Slice.CopyFrom(payload, 0, payload.Length);
             }
         }
 
@@ -149,12 +153,12 @@ namespace KafkaNet.Protocol
         /// <param name="payload">The byte[] encode as a message from kafka.</param>
         /// <returns>Enumerable representing stream of messages decoded from byte[].</returns>
         /// <remarks>The return type is an Enumerable as the message could be a compressed message set.</remarks>
-        public static IEnumerable<Message> DecodeMessage(long offset, byte[] payload)
+        public static IEnumerable<Message> DecodeMessage(long offset, Slice payload)
         {
-            var crc = payload.Take(4).ToArray();
-            using (var stream = new BigEndianBinaryReader(payload, 4))
+            var crc = payload.Subslice(0, 4).ToUint32();
+            using (var stream = new BigEndianBinaryReader(payload.Subslice(4)))
             {
-                if (crc.SequenceEqual(stream.CrcHash()) == false)
+                if (crc != stream.CrcHash())
                     throw new FailCrcCheckException("Buffer did not match CRC validation.");
 
                 var message = new Message

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using KafkaNet.Common;
+using Buffer;
 
 namespace KafkaNet.Protocol
 {
@@ -57,13 +58,13 @@ namespace KafkaNet.Protocol
             }
         }
 
-        public IEnumerable<OffsetFetchResponse> Decode(byte[] payload)
+        public IEnumerable<OffsetFetchResponse> Decode(Slice payload)
         {
             return DecodeOffsetFetchResponse(payload);
         }
 
 
-        protected IEnumerable<OffsetFetchResponse> DecodeOffsetFetchResponse(byte[] data)
+        protected IEnumerable<OffsetFetchResponse> DecodeOffsetFetchResponse(Slice data)
         {
             using (var stream = new BigEndianBinaryReader(data))
             {

@@ -1,4 +1,5 @@
 ﻿using KafkaNet.Protocol;
+using Buffer;
 
 namespace KafkaNet
 {
@@ -10,6 +11,6 @@ namespace KafkaNet
         /// <param name="topic">The topic at which the message will be sent.</param>
         /// <param name="key">The data used to consistently route a message to a particular partition.  Value can be null.</param>
         /// <returns>The partition to send the message to.</returns>
-        Partition Select(Topic topic, byte[] key);
+        Partition Select(Topic topic, Slice key);
     }
 }

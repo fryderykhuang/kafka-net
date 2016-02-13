@@ -4,6 +4,7 @@
 // Originally published at http://damieng.com/blog/2006/08/08/calculating_crc32_in_c_and_net
 
 using System;
+using Buffer;
 
 namespace KafkaNet.Common
 {
@@ -23,6 +24,11 @@ namespace KafkaNet.Common
             PolynomialTable = InitializeTable(DefaultPolynomial);
         }
 
+        public static UInt32 Compute(Slice slice)
+        {
+            return ~CalculateHash(slice);
+        }
+
         public static UInt32 Compute(byte[] buffer)
         {
             return ~CalculateHash(buffer, 0, buffer.Length);
@@ -33,14 +39,14 @@ namespace KafkaNet.Common
             return ~CalculateHash(buffer, offset, length);
         }
 
-        public static byte[] ComputeHash(byte[] buffer)
+        public static UInt32 ComputeHash(byte[] buffer)
         {
-            return UInt32ToBigEndianBytes(Compute(buffer));
+            return Compute(buffer);
         }
 
-        public static byte[] ComputeHash(byte[] buffer, int offset, int length)
+        public static UInt32 ComputeHash(byte[] buffer, int offset, int length)
         {
-            return UInt32ToBigEndianBytes(Compute(buffer, offset, length));
+            return Compute(buffer, offset, length);
         }
 
         private static UInt32[] InitializeTable(UInt32 polynomial)
@@ -58,6 +64,16 @@ namespace KafkaNet.Common
             }
 
             return createTable;
+        }
+
+        private static UInt32 CalculateHash(Slice slice)
+        {
+            var crc = DefaultSeed;
+            slice.Each(b =>
+            {
+                crc = (crc >> 8) ^ PolynomialTable[b ^ crc & 0xff];
+            });
+            return crc;
         }
 
         private static UInt32 CalculateHash(byte[] buffer, int offset, int length)

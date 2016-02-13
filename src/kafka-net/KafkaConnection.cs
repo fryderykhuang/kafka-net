@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using KafkaNet.Common;
 using KafkaNet.Model;
 using KafkaNet.Protocol;
+using Buffer;
 
 namespace KafkaNet
 {
@@ -193,9 +194,9 @@ namespace KafkaNet
                 });
         }
 
-        private void CorrelatePayloadToRequest(byte[] payload)
+        private void CorrelatePayloadToRequest(Slice payload)
         {
-            var correlationId = payload.Take(4).ToArray().ToInt32();
+            var correlationId = payload.ToInt32();
             AsyncRequestItem asyncRequest;
             if (_requestIndex.TryRemove(correlationId, out asyncRequest))
             {
@@ -272,11 +273,11 @@ namespace KafkaNet
             public AsyncRequestItem(int correlationId)
             {
                 CorrelationId = correlationId;
-                ReceiveTask = new TaskCompletionSource<byte[]>();
+                ReceiveTask = new TaskCompletionSource<Slice>();
             }
 
             public int CorrelationId { get; private set; }
-            public TaskCompletionSource<byte[]> ReceiveTask { get; private set; }
+            public TaskCompletionSource<Slice> ReceiveTask { get; private set; }
 
             public void MarkRequestAsSent(Exception ex, TimeSpan timeout, Action<AsyncRequestItem> timeoutFunction)
             {

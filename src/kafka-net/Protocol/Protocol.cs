@@ -1,6 +1,7 @@
 ﻿using System;
 using System.IO;
 using System.IO.Compression;
+using Buffer;
 
 namespace KafkaNet.Protocol
 {
@@ -9,28 +10,28 @@ namespace KafkaNet.Protocol
     /// </summary>
     public static class Compression
     {
-        public static byte[] Zip(byte[] bytes)
+        public static Slice Zip(Slice slice)
         {
             using (var destination = new MemoryStream())
             using (var gzip = new GZipStream(destination, CompressionLevel.Fastest, false))
             {
-                gzip.Write(bytes, 0, bytes.Length);
+                slice.WriteTo(gzip);
                 gzip.Flush();
                 gzip.Close();
-                return destination.ToArray();
+                return Slice.CopyFrom(destination);
             }
         }
 
-        public static byte[] Unzip(byte[] bytes)
+        public static Slice Unzip(Slice slice)
         {
-            using (var source = new MemoryStream(bytes))
+            using (var source = new MemoryStream(slice.Length))
             using (var destination = new MemoryStream())
             using (var gzip = new GZipStream(source, CompressionMode.Decompress, false))
             {
                 gzip.CopyTo(destination);
                 gzip.Flush();
                 gzip.Close();
-                return destination.ToArray();
+                return Slice.CopyFrom(destination);
             }
         }
     }

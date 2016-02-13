@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using KafkaNet.Common;
+using Buffer;
 
 namespace KafkaNet.Protocol
 {
@@ -20,7 +21,7 @@ namespace KafkaNet.Protocol
             return EncodeOffsetCommitRequest(this);
         }
 
-        public IEnumerable<OffsetCommitResponse> Decode(byte[] payload)
+        public IEnumerable<OffsetCommitResponse> Decode(Slice payload)
         {
             return DecodeOffsetCommitResponse(payload);
         }
@@ -61,7 +62,7 @@ namespace KafkaNet.Protocol
             }
         }
 
-        private IEnumerable<OffsetCommitResponse> DecodeOffsetCommitResponse(byte[] data)
+        private IEnumerable<OffsetCommitResponse> DecodeOffsetCommitResponse(Slice data)
         {
             using (var stream = new BigEndianBinaryReader(data))
             {

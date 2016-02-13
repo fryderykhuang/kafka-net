@@ -4,6 +4,7 @@ using System.Linq;
 using KafkaNet.Common;
 using KafkaNet.Model;
 using KafkaNet.Protocol;
+using Buffer;
 
 namespace KafkaNet
 {
@@ -11,14 +12,14 @@ namespace KafkaNet
     {
         private readonly ConcurrentDictionary<string, int> _roundRobinTracker = new ConcurrentDictionary<string, int>();
 
-        public Partition Select(Topic topic, byte[] key)
+        public Partition Select(Topic topic, Slice key)
         {
             if (topic == null) throw new ArgumentNullException("topic");
             if (topic.Partitions.Count <= 0) throw new ApplicationException(string.Format("Topic ({0}) has no partitions.", topic.Name));
 
             //use round robin
             var partitions = topic.Partitions;
-            if (key == null)
+            if (key.Length > 0)
             {
                 //use round robin
                 var paritionIndex = _roundRobinTracker.AddOrUpdate(topic.Name, p => 0, (s, i) =>

@@ -4,6 +4,7 @@ using System.Diagnostics.Contracts;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Buffer;
 
 namespace KafkaNet.Common
 {
@@ -25,17 +26,9 @@ namespace KafkaNet.Common
     {
         private const int KafkaNullSize = -1;
 
-        public BigEndianBinaryReader(byte[] payload, int offset, int count) : base(new MemoryStream(payload, offset, count), Encoding.UTF8)
+        public BigEndianBinaryReader(Slice payload) : base(payload.AsStream(), Encoding.UTF8)
         {
 
-        }
-
-        public BigEndianBinaryReader(byte[] payload, int offset) : this(payload, offset, payload.Length - offset)
-        {
-        }
-
-        public BigEndianBinaryReader(byte[] payload) : this(payload, 0, payload.Length)
-        {
         }
 
         public long Length{get{return base.BaseStream.Length;}}
@@ -116,27 +109,27 @@ namespace KafkaNet.Common
         {
             var size = ReadInt16();
             if (size == KafkaNullSize) return null;
-            return Encoding.UTF8.GetString(RawRead(size));
+            return RawRead(size).ToString(Encoding.UTF8);
         }
 
         public string ReadIntString()
         {
             var size = ReadInt32();
             if (size == KafkaNullSize) return null;
-            return Encoding.UTF8.GetString(RawRead(size));
+            return RawRead(size).ToString(Encoding.UTF8);
         }
 
-        public byte[] ReadInt16PrefixedBytes()
+        public Slice ReadInt16PrefixedBytes()
         {
             var size = ReadInt16();
-            if (size == KafkaNullSize) { return null; }
+            if (size == KafkaNullSize) { return default(Slice); }
             return RawRead(size);
         }
 
-        public byte[] ReadIntPrefixedBytes()
+        public Slice ReadIntPrefixedBytes()
         {
             var size = ReadInt32();
-            if (size == KafkaNullSize) { return null; }
+            if (size == KafkaNullSize) { return default(Slice); }
             return RawRead(size);
         }
 
@@ -148,7 +141,7 @@ namespace KafkaNet.Common
             return buffer;
         }
 
-        public byte[] CrcHash()
+        public UInt32 CrcHash()
         {
             var currentPosition = base.BaseStream.Position;
             try
@@ -176,15 +169,13 @@ namespace KafkaNet.Common
             }
         }
 
-        public byte[] RawRead(int size)
+        public Slice RawRead(int size)
         {
-            if (size <= 0) { return new byte[0]; }
+            if (size <= 0) { return default(Slice); }
 
-            var buffer = new byte[size];
+            var slice = Slice.ReadFrom(this, size);
 
-            base.Read(buffer, 0, size);
-
-            return buffer;
+            return slice;
         }
 
         private T EndianAwareRead<T>(Int32 size, Func<Byte[], Int32, T> converter) where T : struct

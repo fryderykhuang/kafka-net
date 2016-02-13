@@ -2,6 +2,7 @@
 using System.Diagnostics.Contracts;
 using System.IO;
 using System.Text;
+using Buffer;
 
 namespace KafkaNet.Common
 {
@@ -123,6 +124,27 @@ namespace KafkaNet.Common
             }
 
             Write(value);
+        }
+
+        public void Write(Slice value, StringPrefixEncoding encoding)
+        {
+            if (value.Length == 0)
+            {
+                Write(-1);
+                return;
+            }
+
+            switch (encoding)
+            {
+                case StringPrefixEncoding.Int16:
+                    Write((Int16)value.Length);
+                    break;
+                case StringPrefixEncoding.Int32:
+                    Write(value.Length);
+                    break;
+            }
+
+            value.WriteTo(this);
         }
 
         public void Write(string value, StringPrefixEncoding encoding)

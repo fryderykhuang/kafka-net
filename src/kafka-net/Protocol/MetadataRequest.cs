@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using KafkaNet.Common;
 using KafkaNet.Model;
+using Buffer;
 
 namespace KafkaNet.Protocol
 {
@@ -22,7 +23,7 @@ namespace KafkaNet.Protocol
             return EncodeMetadataRequest(this);
         }
 
-        public IEnumerable<MetadataResponse> Decode(byte[] payload)
+        public IEnumerable<MetadataResponse> Decode(Slice payload)
         {
             return new[] { DecodeMetadataResponse(payload) };
         }
@@ -55,7 +56,7 @@ namespace KafkaNet.Protocol
         /// </summary>
         /// <param name="data"></param>
         /// <returns></returns>
-        private MetadataResponse DecodeMetadataResponse(byte[] data)
+        private MetadataResponse DecodeMetadataResponse(Slice data)
         {
             using (var stream = new BigEndianBinaryReader(data))
             {
