@@ -16,6 +16,11 @@ namespace KafkaNet
     {
         public const long INFINITY = long.MaxValue;
         public const long ENDOFTOPIC = -1L;
+        /// <summary>
+        /// Returns the offset just past the end of the topic.
+        /// e.g. 0 for new topics.
+        /// The number represents the offset for the next message (if/when it arrives)
+        /// </summary>
         public const int HEAD = -1;
         public const int TAIL = -2;
 
@@ -44,6 +49,11 @@ namespace KafkaNet
             return result.First();
         }
 
+        /// <summary>
+        /// Returns the offset just past the end of the topic.
+        /// e.g. 0 for new topics.
+        /// The number represents the offset for the next message (if/when it arrives)
+        /// </summary>
         public static async Task<long> GetPartitionHeadOffsetAsync(BrokerRouter router, string topic, int partitionId)
         {
             var offsets = await GetPartitionOffsetAsync(router, topic, partitionId, 1, HEAD).ConfigureAwait(false);
