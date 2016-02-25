@@ -246,19 +246,26 @@ namespace KafkaNet
                 var sendTasks = new List<BrokerRouteSendBatch>();
                 foreach (var group in messageByRouter)
                 {
-                    var payload = new Payload
-                    {
-                        Codec = group.Key.Codec,
-                        Topic = group.Key.Topic,
-                        Partition = group.Key.Route.PartitionId,
-                        Messages = group.Select(x => x.TopicMessage.Message).ToArray()
-                    };
-
                     var request = new ProduceRequest
                     {
                         Acks = ackLevelBatch.Key.Acks,
                         TimeoutMS = (int)ackLevelBatch.Key.Timeout.TotalMilliseconds,
-                        Payload = new Payload[] { payload }
+                        TopicPayloads = new TopicPayload[]
+                        {
+                            new TopicPayload
+                            {
+                                Topic = group.Key.Topic,
+                                PartitionPayloads = new PartitionPayload[]
+                                {
+                                    new PartitionPayload
+                                    {
+                                        Codec = group.Key.Codec,
+                                        Partition = group.Key.Route.PartitionId,
+                                        Messages = group.Select(x => x.TopicMessage.Message).ToArray()
+                                    }
+                                }
+                            }
+                        }
                     };
 
                     await _semaphoreMaximumAsync.WaitAsync(cancellationToken).ConfigureAwait(false);

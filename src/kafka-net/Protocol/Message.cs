@@ -9,17 +9,22 @@ namespace KafkaNet.Protocol
     /// <summary>
     /// Buffer represents a collection of messages to be posted to a specified Topic on specified Partition.
     /// </summary>
-    public class Payload
+    public class PartitionPayload
     {
-        public Payload()
+        public PartitionPayload()
         {
             Codec = MessageCodec.CodecNone;
         }
 
-        public string Topic { get; set; }
         public int Partition { get; set; }
         public MessageCodec Codec { get; set; }
         public Message[] Messages { get; set; }
+    }
+
+    public class TopicPayload
+    {
+        public string Topic { get; set; }
+        public IEnumerable<PartitionPayload> PartitionPayloads { get; set; }
     }
 
     /// <summary>

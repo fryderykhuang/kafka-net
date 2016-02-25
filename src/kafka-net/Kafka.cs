@@ -225,34 +225,24 @@ namespace KafkaNet
         /// <param name="acks">Indicates how many acknowledgements the servers should receive before responding to the request. If it is 0 the server will not send any response (this is the only case where the server will not reply to a request). If it is 1, the server will wait the data is written to the local log before sending a response. If it is -1 the server will block until the message is committed by all in sync replicas before sending a response. For any number > 1 the server will block waiting for this number of acknowledgements to occur (but the server will never wait for more acknowledgements than there are in-sync replicas)</param>
         /// <param name="cancel"></param>
         /// <returns></returns>
-        public static async Task<long[]> ProduceAsync(
+        public static async Task<ProduceResponse[]> ProduceAsync(
             IKafkaConnection connection,
-            string topicName,
-            int partitionId,
             short acks,
-            Message[][] messages,
-            MessageCodec codec = default(MessageCodec),
+            TopicPayload[] payloads,
             TimeSpan timeout = default(TimeSpan),
             CancellationToken cancel = default(CancellationToken)
             )
         {
             if (timeout.Equals(default(TimeSpan)))
                 timeout = TimeSpan.FromMinutes(1);
-            var payload = messages.Select(msgs => new Payload
-            {
-                Codec = codec,
-                Topic = topicName,
-                Partition = partitionId,
-                Messages = msgs,
-            });
             var request = new ProduceRequest
             {
                 Acks = acks,
                 TimeoutMS = (int)timeout.TotalMilliseconds,
-                Payload = payload.ToArray(),
+                TopicPayloads = payloads
             };
             var response = await connection.SendAsync(request, cancel);
-            return response.Select(r => r.Offset).ToArray();
+            return response.ToArray();
         }
     }
 }

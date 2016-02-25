@@ -28,7 +28,7 @@ namespace KafkaNet.Protocol
         /// <summary>
         /// Collection of payloads to post to kafka
         /// </summary>
-        public IEnumerable<Payload> Payload;
+        public IEnumerable<TopicPayload> TopicPayloads;
 
 
         public KafkaDataPayload Encode()
@@ -44,6 +44,55 @@ namespace KafkaNet.Protocol
         #region Protocol...
         private KafkaDataPayload EncodeProduceRequest(ProduceRequest request)
         {
+            int totalCompressedBytes = 0;
+            using (var message = EncodeHeader(request))
+            {
+                var topicPayloads = request.TopicPayloads.ToArray();
+                message.Pack(request.Acks)
+                    .Pack(request.TimeoutMS)
+                    .Pack(topicPayloads.Length);
+                foreach (var topicPayload in topicPayloads)
+                {
+                    message.Pack(topicPayload.Topic, StringPrefixEncoding.Int16);
+                    var partitionPayloads = topicPayload.PartitionPayloads.ToArray();
+                    message.Pack(partitionPayloads.Length);
+                    foreach (var partitionPayload in partitionPayloads)
+                    {
+                        message.Pack(partitionPayload.Partition);
+                        switch (partitionPayload.Codec)
+                        {
+                            case MessageCodec.CodecNone:
+                                message.Pack(Message.EncodeMessageSet(partitionPayload.Messages));
+                                break;
+                            case MessageCodec.CodecGzip:
+                                var compressedBytes = CreateGzipCompressedMessage(partitionPayload.Messages);
+                                Interlocked.Add(ref totalCompressedBytes, compressedBytes.CompressedAmount);
+                                message.Pack(Message.EncodeMessageSet(new[] { compressedBytes.CompressedMessage }));
+                                break;
+                            default:
+                                throw new NotSupportedException(string.Format("Codec type of {0} is not supported.", partitionPayload.Codec));
+                        }
+                    }
+                }
+
+                var result = new KafkaDataPayload
+                {
+                    Buffer = message.Payload(),
+                    CorrelationId = request.CorrelationId,
+                    MessageCount = request.TopicPayloads.Sum(t => t.PartitionPayloads.Sum(p => p.Messages.Length)),
+                };
+                StatisticsTracker.RecordProduceRequest(result.MessageCount, result.Buffer.Length, totalCompressedBytes);
+                return result;
+
+            }
+
+            /*
+            TODO: Fix grouping
+            The original does the grouping in this function which makes it very difficult, maybe impossible, to correlate the response offsets
+            with the actual request messages.
+            Grouping is good, but should be done outside this function if you want to know how stuff was grouped
+            */
+            /*
             int totalCompressedBytes = 0;
 
             var payload = request.Payload ?? new Payload[0];
@@ -66,7 +115,7 @@ namespace KafkaNet.Protocol
                 {
                     var payloads = groupedPayload.ToList();
                     message.Pack(groupedPayload.Key.Topic, StringPrefixEncoding.Int16)
-                        .Pack(payloads.Count)
+                        .Pack(1) // the way this groups them, each payload only ever gets one partition and so gets only one message set
                         .Pack(groupedPayload.Key.Partition);
 
                     switch (groupedPayload.Key.Codec)
@@ -94,6 +143,7 @@ namespace KafkaNet.Protocol
                 StatisticsTracker.RecordProduceRequest(result.MessageCount, result.Buffer.Length, totalCompressedBytes);
                 return result;
             }
+            */
         }
 
         private CompressedMessageResult CreateGzipCompressedMessage(IEnumerable<Message> messages)
