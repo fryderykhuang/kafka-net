@@ -14,11 +14,6 @@ namespace KafkaNet
         KafkaEndpoint Endpoint { get; }
 
         /// <summary>
-        /// Value indicating the read polling thread is still active.
-        /// </summary>
-        bool ReadPolling { get; }
-
-        /// <summary>
         /// Send raw payload data up to the connected endpoint.
         /// </summary>
         /// <param name="payload">The raw data to send to the connected endpoint.</param>

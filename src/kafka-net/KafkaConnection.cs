@@ -50,14 +50,6 @@ namespace KafkaNet
         }
 
         /// <summary>
-        /// Indicates a thread is polling the stream for data to read.
-        /// </summary>
-        public bool ReadPolling
-        {
-            get { return _ensureOneActiveReader >= 1; }
-        }
-
-        /// <summary>
         /// Provides the unique ip/port endpoint for this connection
         /// </summary>
         public KafkaEndpoint Endpoint { get { return _client.Endpoint; } }
