@@ -104,6 +104,101 @@ namespace KafkaNet
             });
         }
 
+        public class PartitionFetchConnection : IDisposable
+        {
+            private readonly int partitionId;
+            private readonly BrokerRouter router;
+            private readonly string topicName;
+            private IKafkaConnection connection;
+
+            public PartitionFetchConnection(BrokerRouter router, string topicName, int partitionId)
+            {
+                this.router = router;
+                this.topicName = topicName;
+                this.partitionId = partitionId;
+            }
+
+            private async Task RefreshRoutes()
+            {
+                await router.RefreshTopicMetadataAsync();
+                await Connect();
+            }
+
+            private async Task Connect()
+            {
+                var route = await router.SelectBrokerRouteAsync(topicName, partitionId);
+                connection = router.CloneConnectionForFetch(route.Connection);
+            }
+
+            public async Task<FetchResponse> FetchAsync(bool wait, long fromOffset, CancellationToken cancel = default(CancellationToken))
+            {
+                var bufferSizeHighWatermark = FetchRequest.DefaultBufferSize;
+
+                for (;;)
+                {
+                    //build a fetch request for partition at offset
+                    var fetch = new Fetch
+                    {
+                        Topic = topicName,
+                        PartitionId = partitionId,
+                        Offset = fromOffset,
+                        MaxBytes = bufferSizeHighWatermark,
+                    };
+
+                    var fetches = new List<Fetch> { fetch };
+
+                    var fetchRequest = new FetchRequest
+                    {
+                        MaxWaitTime = int.MaxValue,
+                        MinBytes = wait ? 1 : 0,
+                        Fetches = fetches
+                    };
+
+                    var responses = await connection.SendAsync(fetchRequest, cancel).ConfigureAwait(false);
+
+                    if (responses.Count == 0)
+                    {
+                        // something went wrong, refresh the route before trying again
+                        await RefreshRoutes();
+                        continue;
+                    }
+
+                    var response = responses.First();
+
+                    switch ((ErrorResponseCode)response.Error)
+                    {
+                        case ErrorResponseCode.NoError:
+                            break;
+                        case ErrorResponseCode.OffsetOutOfRange:
+                            throw new OffsetOutOfRangeException("FetchResponse indicated we requested an offset that is out of range.  Requested Offset:{0}", fetchRequest.Fetches[0].Offset) { FetchRequest = fetchRequest.Fetches[0] };
+                        case ErrorResponseCode.BrokerNotAvailable:
+                        case ErrorResponseCode.ConsumerCoordinatorNotAvailableCode:
+                        case ErrorResponseCode.LeaderNotAvailable:
+                        case ErrorResponseCode.NotLeaderForPartition:
+                            await RefreshRoutes();
+                            continue;
+                        default:
+                            throw new KafkaApplicationException("FetchResponse returned error condition.  ErrorCode:{0}", response.Error) { ErrorCode = response.Error };
+                    }
+
+                    return response;
+                }
+            }
+
+            public static async Task<PartitionFetchConnection> Connect(BrokerRouter router, string topicName, int partitionId)
+            {
+                var cxn = new PartitionFetchConnection(router, topicName, partitionId);
+                await cxn.Connect();
+                return cxn;
+            }
+
+            public void Dispose()
+            {
+                if (connection != null)
+                    connection.Dispose();
+            }
+        }
+
         public static async Task ConsumePartitionAsync(BrokerRouter router, string topicName, int partitionId, long fromOffset, long toOffsetExcl, Action<FetchResponse> onNext, Action onComplete, Action<Exception> onError, CancellationToken cancel = default(CancellationToken))
         {
             // This is the loop that continuously gets the broker for the selected topic and partition
