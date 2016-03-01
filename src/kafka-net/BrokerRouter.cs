@@ -4,6 +4,8 @@ using System.Collections.Generic;
 using System.Linq;
 using KafkaNet.Model;
 using KafkaNet.Protocol;
+using System.Threading.Tasks;
+using Nito.AsyncEx;
 
 namespace KafkaNet
 {
@@ -20,7 +22,7 @@ namespace KafkaNet
     /// </summary>
     public class BrokerRouter : IBrokerRouter
     {
-        private readonly object _threadLock = new object();
+        private readonly AsyncLock _lock = new AsyncLock();
         private readonly KafkaOptions _kafkaOptions;
         private readonly KafkaMetadataProvider _kafkaMetadataProvider;
         private readonly ConcurrentDictionary<KafkaEndpoint, IKafkaConnection> _defaultConnectionIndex = new ConcurrentDictionary<KafkaEndpoint, IKafkaConnection>();
@@ -54,6 +56,25 @@ namespace KafkaNet
         /// <exception cref="InvalidTopicMetadataException">Thrown if the returned metadata for the given topic is invalid or missing.</exception>
         /// <exception cref="InvalidPartitionException">Thrown if the give partitionId does not exist for the given topic.</exception>
         /// <exception cref="ServerUnreachableException">Thrown if none of the Default Brokers can be contacted.</exception>
+        public async Task<BrokerRoute> SelectBrokerRouteAsync(string topic, int partitionId)
+        {
+            var cachedTopic = GetCachedTopic(topic);
+            if (cachedTopic == null)
+            {
+                await RefreshTopicMetadataAsync(topic);
+                cachedTopic = GetCachedTopic(topic);
+                if (cachedTopic == null)
+                    throw new InvalidTopicMetadataException(ErrorResponseCode.UnknownTopicOrPartition, "The Metadata is invalid as it returned no data for the given topic: {0}", topic);
+            }
+            var partition = cachedTopic.Partitions.FirstOrDefault(x => x.PartitionId == partitionId);
+            if (partition == null)
+                throw new InvalidPartitionException("The topic {0} does not have partition {1}", topic, partitionId);
+
+            return TryGetRouteFromCache(topic, partition);
+        }
+
+        // TODO: remove old code
+#if OLD_IMPLEMENTATION
         public BrokerRoute SelectBrokerRoute(string topic, int partitionId)
         {
             var cachedTopic = GetTopicMetadata(topic);
@@ -68,6 +89,8 @@ namespace KafkaNet
 
             return GetCachedRoute(topicMetadata.Name, partition);
         }
+
+#endif
 
         public IKafkaConnection CloneConnectionForFetch(IKafkaConnection connection)
         {
@@ -92,17 +115,17 @@ namespace KafkaNet
         /// <returns>A broker route for the given topic.</returns>
         /// <exception cref="InvalidTopicMetadataException">Thrown if the returned metadata for the given topic is invalid or missing.</exception>
         /// <exception cref="ServerUnreachableException">Thrown if none of the Default Brokers can be contacted.</exception>
-        public BrokerRoute SelectBrokerRoute(string topic, byte[] key = null)
+        public async Task<BrokerRoute> SelectBrokerRouteAsync(string topic, byte[] key = null)
         {
             //get topic either from cache or server.
-            var cachedTopic = GetTopicMetadata(topic).FirstOrDefault();
+            var cachedTopic = (await GetTopicMetadataAsync(topic)).FirstOrDefault();
 
             if (cachedTopic == null)
                 throw new InvalidTopicMetadataException(ErrorResponseCode.NoError, "The Metadata is invalid as it returned no data for the given topic:{0}", topic);
 
             var partition = _kafkaOptions.PartitionSelector.Select(cachedTopic, key);
 
-            return GetCachedRoute(cachedTopic.Name, partition);
+            return await GetCachedRouteAsync(cachedTopic.Name, partition);
         }
 
         /// <summary>
@@ -114,7 +137,7 @@ namespace KafkaNet
         /// The topic metadata will by default check the cache first and then if it does not exist it will then
         /// request metadata from the server.  To force querying the metadata from the server use <see cref="RefreshTopicMetadata"/>
         /// </remarks>
-        public List<Topic> GetTopicMetadata(params string[] topics)
+        public async Task<List<Topic>> GetTopicMetadataAsync(params string[] topics)
         {
             var topicSearchResult = SearchCacheForTopics(topics);
 
@@ -122,7 +145,7 @@ namespace KafkaNet
             if (topicSearchResult.Missing.Count > 0)
             {
                 //double check for missing topics and query
-                RefreshTopicMetadata(topicSearchResult.Missing.Where(x => _topicIndex.ContainsKey(x) == false).ToArray());
+                await RefreshTopicMetadataAsync(topicSearchResult.Missing.Where(x => _topicIndex.ContainsKey(x) == false).ToArray());
 
                 var refreshedTopics = topicSearchResult.Missing.Select(GetCachedTopic).Where(x => x != null);
                 topicSearchResult.Topics.AddRange(refreshedTopics);
@@ -139,16 +162,15 @@ namespace KafkaNet
         /// This method will ignore the cache and initiate a call to the kafka servers for all given topics, updating the cache with the resulting metadata.
         /// Only call this method to force a metadata update.  For all other queries use <see cref="GetTopicMetadata"/> which uses cached values.
         /// </remarks>
-        public void RefreshTopicMetadata(params string[] topics)
+        public async Task RefreshTopicMetadataAsync(params string[] topics)
         {
-            //TODO need to remove lock here, try and move to lock free design
-            lock (_threadLock)
+            using (await _lock.LockAsync())
             {
                 _kafkaOptions.Log.DebugFormat("BrokerRouter: Refreshing metadata for topics: {0}", string.Join(",", topics));
 
                 //get the connections to query against and get metadata
                 var connections = _defaultConnectionIndex.Values.Union(_brokerConnectionIndex.Values).ToArray();
-                var metadataResponse = _kafkaMetadataProvider.Get(connections, topics);
+                var metadataResponse = await _kafkaMetadataProvider.GetAsync(connections, topics);
 
                 UpdateInternalMetadataCache(metadataResponse);
             }
@@ -177,14 +199,14 @@ namespace KafkaNet
             return _topicIndex.TryGetValue(topic, out cachedTopic) ? cachedTopic : null;
         }
 
-        private BrokerRoute GetCachedRoute(string topic, Partition partition)
+        private async Task<BrokerRoute> GetCachedRouteAsync(string topic, Partition partition)
         {
             var route = TryGetRouteFromCache(topic, partition);
 
             //leader could not be found, refresh the broker information and try one more time
             if (route == null)
             {
-                RefreshTopicMetadata(topic);
+                await RefreshTopicMetadataAsync(topic);
                 route = TryGetRouteFromCache(topic, partition);
             }
 

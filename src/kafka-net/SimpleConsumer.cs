@@ -44,10 +44,15 @@ namespace KafkaNet
         /// Returns a blocking enumerable of messages received from Kafka.
         /// </summary>
         /// <returns>Blocking enumberable of messages from Kafka.</returns>
-        public IEnumerable<FetchResponse> Consume(CancellationToken? cancellationToken = null)
+        public async Task<IEnumerable<FetchResponse>> ConsumeAsync(CancellationToken? cancellationToken = null)
         {
             _options.Log.DebugFormat("Consumer: Beginning consumption of topic: {0}", _options.Topic);
-            EnsurePartitionPollingThreads();
+            await EnsurePartitionPollingThreadsAsync();
+            return Consume(cancellationToken);
+        }
+
+        private IEnumerable<FetchResponse> Consume(CancellationToken? cancellationToken)
+        {
             foreach (var response in _fetchResponseQueue.GetConsumingEnumerable(cancellationToken ?? CancellationToken.None))
             {
                 if (Object.ReferenceEquals(response, EndOfTopic))
@@ -77,12 +82,12 @@ namespace KafkaNet
             return _partitionOffset;
         }
 
-        private void EnsurePartitionPollingThreads()
+        private async Task EnsurePartitionPollingThreadsAsync()
         {
             try
             {
                 _options.Log.DebugFormat("Consumer: Refreshing partitions for topic: {0}", _options.Topic);
-                var topic = _options.Router.GetTopicMetadata(_options.Topic);
+                var topic = await _options.Router.GetTopicMetadataAsync(_options.Topic);
                 if (topic.Count <= 0) throw new ApplicationException(string.Format("Unable to get metadata for topic:{0}.", _options.Topic));
                 _topic = topic.First();
 
@@ -138,7 +143,7 @@ namespace KafkaNet
                                 };
 
                             //make request and post to queue
-                            var route = _options.Router.SelectBrokerRoute(topic, partitionId);
+                            var route = await _options.Router.SelectBrokerRouteAsync(topic, partitionId);
 
                             var responses = await route.Connection.SendAsync(fetchRequest).ConfigureAwait(false);
 
@@ -188,8 +193,8 @@ namespace KafkaNet
                         {
                             //refresh our metadata and ensure we are polling the correct partitions
                             _options.Log.ErrorFormat(ex.Message);
-                            _options.Router.RefreshTopicMetadata(topic);
-                            EnsurePartitionPollingThreads();
+                            await _options.Router.RefreshTopicMetadataAsync(topic);
+                            await EnsurePartitionPollingThreadsAsync();
                         }
                         catch (Exception ex)
                         {
@@ -223,9 +228,9 @@ namespace KafkaNet
             }
         }
 
-        public Topic GetTopic(string topic)
+        public Task<Topic> GetTopicAsync(string topic)
         {
-            return _metadataQueries.GetTopic(topic);
+            return _metadataQueries.GetTopicAsync(topic);
         }
 
         public Task<List<OffsetResponse>> GetTopicOffsetAsync(string topic, int maxOffsets = 2, int time = -1)

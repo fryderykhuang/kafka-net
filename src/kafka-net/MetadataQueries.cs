@@ -27,14 +27,14 @@ namespace KafkaNet
         /// <returns></returns>
         public async Task<List<OffsetResponse>> GetTopicOffsetAsync(string topic, int maxOffsets = 2, int time = -1)
         {
-            var topicMetadata = GetTopic(topic);
+            var topicMetadata = await GetTopicAsync(topic);
 
             //send the offset request to each partition leader
             var sendRequests = topicMetadata.Partitions
                 .GroupBy(x => x.PartitionId)
-                .Select(p =>
+                .Select(async p =>
                     {
-                        var route = _brokerRouter.SelectBrokerRoute(topic, p.Key);
+                        var route = await _brokerRouter.SelectBrokerRouteAsync(topic, p.Key);
                         var request = new OffsetRequest
                                         {
                                             Offsets = new List<Offset>
@@ -49,11 +49,11 @@ namespace KafkaNet
                                                 }
                                         };
 
-                        return route.Connection.SendAsync(request);
+                        return await route.Connection.SendAsync(request);
                     }).ToArray();
 
-            await Task.WhenAll(sendRequests).ConfigureAwait(false);
-            return sendRequests.SelectMany(x => x.Result).ToList();
+            var reqs = await Task.WhenAll(sendRequests).ConfigureAwait(false);
+            return reqs.SelectMany(x => x).ToList();
         }
 
         /// <summary>
@@ -61,9 +61,9 @@ namespace KafkaNet
         /// </summary>
         /// <param name="topic">The metadata on the requested topic.</param>
         /// <returns>Topic object containing the metadata on the requested topic.</returns>
-        public Topic GetTopic(string topic)
+        public async Task<Topic> GetTopicAsync(string topic)
         {
-            var response = _brokerRouter.GetTopicMetadata(topic);
+            var response = await _brokerRouter.GetTopicMetadataAsync(topic);
 
             if (response.Count <= 0) throw new InvalidTopicMetadataException(ErrorResponseCode.NoError, "No metadata could be found for topic: {0}", topic);
 

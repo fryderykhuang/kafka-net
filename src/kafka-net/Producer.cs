@@ -138,9 +138,9 @@ namespace KafkaNet
         /// </summary>
         /// <param name="topic">The name of the topic to get metadata for.</param>
         /// <returns>Topic with metadata information.</returns>
-        public Topic GetTopic(string topic)
+        public Task<Topic> GetTopicAsync(string topic)
         {
-            return _metadataQueries.GetTopic(topic);
+            return _metadataQueries.GetTopicAsync(topic);
         }
 
 
@@ -236,11 +236,11 @@ namespace KafkaNet
             //we must send a different produce request for each ack level and timeout combination.
             foreach (var ackLevelBatch in messages.GroupBy(batch => new { batch.Acks, batch.Timeout }))
             {
-                var messageByRouter = ackLevelBatch.Select(batch => new
+                var messageByRouter = (await Task.WhenAll(ackLevelBatch.Select(async batch => new
                 {
                     TopicMessage = batch,
-                    Route = BrokerRouter.SelectBrokerRoute(batch.Topic, batch.Message.Key),
-                })
+                    Route = await BrokerRouter.SelectBrokerRouteAsync(batch.Topic, batch.Message.Key),
+                })))
                                          .GroupBy(x => new { x.Route, x.TopicMessage.Topic, x.TopicMessage.Codec });
 
                 var sendTasks = new List<BrokerRouteSendBatch>();
@@ -278,7 +278,7 @@ namespace KafkaNet
                     };
 
                     //ensure the async is released as soon as each task is completed
-                    brokerSendTask.Task.ContinueWith(t => { _semaphoreMaximumAsync.Release(); }, cancellationToken);
+                    var reeaseTask = brokerSendTask.Task.ContinueWith(t => { _semaphoreMaximumAsync.Release(); }, cancellationToken);
 
                     sendTasks.Add(brokerSendTask);
                 }

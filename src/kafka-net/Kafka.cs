@@ -44,7 +44,7 @@ namespace KafkaNet
                     }
                 },
             };
-            var route = router.SelectBrokerRoute(topic, partitionId);
+            var route = await router.SelectBrokerRouteAsync(topic, partitionId);
             var result = await route.Connection.SendAsync(request).ConfigureAwait(false);
             return result.First();
         }
@@ -111,12 +111,12 @@ namespace KafkaNet
             var cursor = new Cursor { NextOffset = fromOffset };
             for (;;)
             {
-                var topics = router.GetTopicMetadata(topicName);
+                var topics = await router.GetTopicMetadataAsync(topicName);
                 if (topics.Count <= 0)
                     throw new ApplicationException(string.Format("Unable to get metadata for topic:{0}.", topicName));
 
                 //make request and post to queue
-                var route = router.SelectBrokerRoute(topicName, partitionId);
+                var route = await router.SelectBrokerRouteAsync(topicName, partitionId);
                 using (var connection = router.CloneConnectionForFetch(route.Connection))
                 {
                     bool end = await ConsumePartitionAsync(connection, topicName, partitionId, cursor, toOffsetExcl, onNext, onComplete, onError, cancel).ConfigureAwait(false);
@@ -124,7 +124,7 @@ namespace KafkaNet
                         break;
                 }
 
-                router.RefreshTopicMetadata(topicName);
+                await router.RefreshTopicMetadataAsync(topicName);
             }
         }
 
@@ -210,9 +210,9 @@ namespace KafkaNet
             }
         }
 
-        public static IKafkaConnection Connect(BrokerRouter router, string topicName, int partitionId, TimeSpan? responseTimeoutMs = null)
+        public static async Task<IKafkaConnection> ConnectAsync(BrokerRouter router, string topicName, int partitionId, TimeSpan? responseTimeoutMs = null)
         {
-            BrokerRoute route = router.SelectBrokerRoute(topicName, partitionId);
+            BrokerRoute route = await router.SelectBrokerRouteAsync(topicName, partitionId);
             return router.CloneConnection(route.Connection, responseTimeoutMs ?? TimeSpan.MaxValue);
         }
 
