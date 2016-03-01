@@ -173,6 +173,16 @@ namespace KafkaNet
                             catch (OperationCanceledException)
                             {
                             }
+                            catch (ServerDisconnectedException sde)
+                            {
+                                // if the server has been disconnected, then all of our waiting requests will not succeed, so cancel them
+                                foreach (var id in _requestIndex.Keys.ToArray())
+                                {
+                                    AsyncRequestItem ari;
+                                    if (_requestIndex.TryRemove(id, out ari))
+                                        ari.ReceiveTask?.TrySetException(sde);
+                                }
+                            }
                             catch (Exception ex)
                             {
                                 //don't record the exception if we are disposing

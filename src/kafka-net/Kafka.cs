@@ -272,6 +272,10 @@ namespace KafkaNet
                     onError(e);
                     return true;
                 }
+                catch (Exception)
+                {
+                    return false;
+                }
 
                 if (responses.Count == 0) // something went wrong, refresh the route before trying again
                     return false;
