@@ -52,7 +52,7 @@ namespace KafkaNet
             do
             {
                 performRetry = false;
-                metadataResponse = await GetMetadataResponseAsync(connections, request);
+                metadataResponse = await GetMetadataResponseAsync(connections, request).ConfigureAwait(false);
                 if (metadataResponse == null) return null;
 
                 foreach (var validation in ValidateResponse(metadataResponse))
@@ -68,7 +68,7 @@ namespace KafkaNet
                     }
                 }
 
-                await BackoffOnRetryAsync(++retryAttempt, performRetry);
+                await BackoffOnRetryAsync(++retryAttempt, performRetry).ConfigureAwait(false);
 
             } while (_interrupted == false && performRetry);
 
@@ -81,7 +81,7 @@ namespace KafkaNet
             {
                 var backoff = retryAttempt*retryAttempt*BackoffMilliseconds;
                 _log.WarnFormat("Backing off metadata request retry.  Waiting for {0}ms.", backoff);
-                await Task.Delay(TimeSpan.FromMilliseconds(backoff));
+                await Task.Delay(TimeSpan.FromMilliseconds(backoff)).ConfigureAwait(false);
             }
         }
 
@@ -92,7 +92,7 @@ namespace KafkaNet
             {
                 try
                 {
-                    var response = await conn.SendAsync(request);
+                    var response = await conn.SendAsync(request).ConfigureAwait(false);
                     if (response != null && response.Count > 0)
                     {
                         return response.FirstOrDefault();

@@ -61,7 +61,7 @@ namespace KafkaNet
             var cachedTopic = GetCachedTopic(topic);
             if (cachedTopic == null)
             {
-                await RefreshTopicMetadataAsync(topic);
+                await RefreshTopicMetadataAsync(topic).ConfigureAwait(false);
                 cachedTopic = GetCachedTopic(topic);
                 if (cachedTopic == null)
                     throw new InvalidTopicMetadataException(ErrorResponseCode.UnknownTopicOrPartition, "The Metadata is invalid as it returned no data for the given topic: {0}", topic);
@@ -170,7 +170,7 @@ namespace KafkaNet
 
                 //get the connections to query against and get metadata
                 var connections = _defaultConnectionIndex.Values.Union(_brokerConnectionIndex.Values).ToArray();
-                var metadataResponse = await _kafkaMetadataProvider.GetAsync(connections, topics);
+                var metadataResponse = await _kafkaMetadataProvider.GetAsync(connections, topics).ConfigureAwait(false);
 
                 UpdateInternalMetadataCache(metadataResponse);
             }

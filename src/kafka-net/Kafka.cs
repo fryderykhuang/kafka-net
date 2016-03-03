@@ -44,7 +44,7 @@ namespace KafkaNet
                     }
                 },
             };
-            var route = await router.SelectBrokerRouteAsync(topic, partitionId);
+            var route = await router.SelectBrokerRouteAsync(topic, partitionId).ConfigureAwait(false);
             var result = await route.Connection.SendAsync(request).ConfigureAwait(false);
             return result.First();
         }
