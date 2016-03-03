@@ -81,7 +81,7 @@ namespace KafkaNet
         /// <returns></returns>
         public static IObservable<FetchResponse> CreatePartitionObservable(BrokerRouter router, string topicName, int partitionId, long fromOffset, long toOffsetExcl, CancellationToken cancel = default(CancellationToken))
         {
-            return Observable.Create<FetchResponse>(async observer =>
+            return Observable.Create<FetchResponse>(observer =>
             {
                 CancellationDisposable disposable = new CancellationDisposable();
                 //CancellationTokenSource disposal = new CancellationTokenSource();
@@ -89,7 +89,7 @@ namespace KafkaNet
                     ? disposable.Token
                     : CancellationTokenSource.CreateLinkedTokenSource(disposable.Token, cancel).Token;
 
-                await ConsumePartitionAsync(
+                var task = ConsumePartitionAsync(
                     router: router,
                     topicName: topicName,
                     partitionId: partitionId,
