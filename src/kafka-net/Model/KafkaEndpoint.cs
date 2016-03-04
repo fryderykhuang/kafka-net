@@ -16,7 +16,7 @@ namespace KafkaNet.Model
         public override int GetHashCode()
         {
             //calculated like this to ensure ports on same address sort in the desc order
-            return (Endpoint != null ? Endpoint.Address.GetHashCode() + Endpoint.Port : 0);
+            return (Endpoint != null ? Endpoint.GetHashCode() : 0);
         }
 
         public override bool Equals(object obj)
