@@ -249,7 +249,7 @@ namespace KafkaNet
                 {
                     UpsertConnectionToBrokerConnectionIndex(broker.Broker.BrokerId, connection);
                 }
-                else
+                else if (!_brokerConnectionIndex.TryGetValue(broker.Broker.BrokerId, out connection) || !connection.Endpoint.Equals(broker.Endpoint))
                 {
                     connection = _kafkaOptions.KafkaConnectionFactory.Create(broker.Endpoint, _kafkaOptions.ResponseTimeoutMs, _kafkaOptions.Log);
                     UpsertConnectionToBrokerConnectionIndex(broker.Broker.BrokerId, connection);
