@@ -225,7 +225,7 @@ namespace KafkaNet
 
         private static async Task<bool> ConsumePartitionAsync(IKafkaConnection connection, string topicName, int partitionId, Cursor cursor, long toOffsetExcl, Action<FetchResponse> onNext, Action onComplete, Action<Exception> onError, CancellationToken cancel = default(CancellationToken))
         {
-            var bufferSizeHighWatermark = FetchRequest.DefaultBufferSize;
+            var bufferSizeHighWatermark = 131072;
 
             // we don't know the topic high water mark yet, so initialize to -1
             // when we make the first request, we won't set a minimum byte count so that if there are no messages at all, we still get a response
