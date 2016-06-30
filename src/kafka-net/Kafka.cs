@@ -301,7 +301,17 @@ namespace KafkaNet
 
                 topicHighWaterMark = response.HighWaterMark;
 
-                onNext(response);
+                try
+                {
+                    onNext(response);
+                }
+                catch (Exception e)
+                {
+                    // TODO: handle this a better way.  We absolutely need to grab the developer's attention, but we don't want to cause the stream to end
+                    Console.WriteLine("***********************************************************************");
+                    Console.WriteLine("Warning: an observer threw an exception that it did not catch: {0}", e);
+                    Console.WriteLine("***********************************************************************");
+                }
 
                 if (response.Messages.Count > 0)
                     cursor.NextOffset = response.Messages[response.Messages.Count - 1].Meta.Offset + 1;
