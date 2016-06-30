@@ -29,6 +29,28 @@ namespace KafkaNet
             public long NextOffset;
         }
 
+        private enum FetchResultCode
+        {
+            Ok,
+            RefreshAndRetry,
+            IncreaseBufferAndRetry,
+            End,
+        }
+
+        private class FetchResult
+        {
+            public FetchResultCode Code { get; }
+            public FetchResponse Response { get; }
+            public Exception Exception { get; }
+
+            public FetchResult(FetchResultCode code, FetchResponse response, Exception exception)
+            {
+                Code = code;
+                Response = response;
+                Exception = exception;
+            }
+        }
+
         public static async Task<OffsetResponse> GetPartitionOffsetAsync(BrokerRouter router, string topic, int partitionId, int maxResults, int time)
         {
             var request = new OffsetRequest
@@ -130,68 +152,6 @@ namespace KafkaNet
                 connection = router.CloneConnectionForFetch(route.Connection);
             }
 
-            public async Task<FetchResponse> FetchAsync(bool wait, long fromOffset, CancellationToken cancel = default(CancellationToken))
-            {
-                var bufferSizeHighWatermark = FetchRequest.DefaultBufferSize;
-
-                for (;;)
-                {
-                    //build a fetch request for partition at offset
-                    var fetch = new Fetch
-                    {
-                        Topic = topicName,
-                        PartitionId = partitionId,
-                        Offset = fromOffset,
-                        MaxBytes = bufferSizeHighWatermark,
-                    };
-
-                    var fetches = new List<Fetch> { fetch };
-
-                    var fetchRequest = new FetchRequest
-                    {
-                        MaxWaitTime = int.MaxValue,
-                        MinBytes = wait ? 1 : 0,
-                        Fetches = fetches
-                    };
-
-                    var responses = await connection.SendAsync(fetchRequest, cancel).ConfigureAwait(false);
-
-                    if (responses.Count == 0)
-                    {
-                        // something went wrong, refresh the route before trying again
-                        await RefreshRoutes();
-                        continue;
-                    }
-
-                    var response = responses.First();
-
-                    switch ((ErrorResponseCode)response.Error)
-                    {
-                        case ErrorResponseCode.NoError:
-                            break;
-                        case ErrorResponseCode.OffsetOutOfRange:
-                            throw new OffsetOutOfRangeException("FetchResponse indicated we requested an offset that is out of range.  Requested Offset:{0}", fetchRequest.Fetches[0].Offset) { FetchRequest = fetchRequest.Fetches[0] };
-                        case ErrorResponseCode.BrokerNotAvailable:
-                        case ErrorResponseCode.ConsumerCoordinatorNotAvailableCode:
-                        case ErrorResponseCode.LeaderNotAvailable:
-                        case ErrorResponseCode.NotLeaderForPartition:
-                            await RefreshRoutes();
-                            continue;
-                        default:
-                            throw new KafkaApplicationException("FetchResponse returned error condition.  ErrorCode:{0}", response.Error) { ErrorCode = response.Error };
-                    }
-
-                    return response;
-                }
-            }
-
-            public static async Task<PartitionFetchConnection> Connect(BrokerRouter router, string topicName, int partitionId)
-            {
-                var cxn = new PartitionFetchConnection(router, topicName, partitionId);
-                await cxn.Connect();
-                return cxn;
-            }
-
             public void Dispose()
             {
                 if (connection != null)
@@ -223,99 +183,160 @@ namespace KafkaNet
             }
         }
 
+        const int BufferMax = 1024 * 1024 * 5;
+
         private static async Task<bool> ConsumePartitionAsync(IKafkaConnection connection, string topicName, int partitionId, Cursor cursor, long toOffsetExcl, Action<FetchResponse> onNext, Action onComplete, Action<Exception> onError, CancellationToken cancel = default(CancellationToken))
         {
-            var bufferSizeHighWatermark = 131072;
+            var bufferSizeHighWatermark = 1024 * 5; // Default to 5 KB, this way we get messages with low latency at first, and if this isn't enough, we'll increase it later logarithmically
 
             // we don't know the topic high water mark yet, so initialize to -1
             // when we make the first request, we won't set a minimum byte count so that if there are no messages at all, we still get a response
             // the response will tell us the high water mark and we can exit if this is nonblocking, or continue to wait forever otherwise
             long topicHighWaterMark = -1;
 
-            for (;;)
+            // give ourselves the ability to abort a running fetch
+            var abort = new CancellationTokenSource();
+            cancel = CancellationTokenSource.CreateLinkedTokenSource(abort.Token, cancel).Token;
+
+            var nextOffset = cursor.NextOffset;
+            var fetchResultTask = FetchAsync(connection, topicName, partitionId, nextOffset, toOffsetExcl, cancel, bufferSizeHighWatermark, topicHighWaterMark).ConfigureAwait(false);
+            try
             {
-
-                if ((toOffsetExcl == ENDOFTOPIC && cursor.NextOffset == topicHighWaterMark) || (toOffsetExcl > 0 && cursor.NextOffset >= toOffsetExcl))
+                for (;;)
                 {
-                    onComplete();
-                    return true; // we're done
+                    var fetchResult = await fetchResultTask;
+                    switch (fetchResult.Code)
+                    {
+                        case FetchResultCode.IncreaseBufferAndRetry:
+                            bufferSizeHighWatermark = Math.Min(bufferSizeHighWatermark * 2, BufferMax); // 5 MB max
+                            Console.WriteLine("Increasing buffer size to {0}", bufferSizeHighWatermark);
+                            fetchResultTask = FetchAsync(connection, topicName, partitionId, nextOffset, toOffsetExcl, cancel, bufferSizeHighWatermark, topicHighWaterMark).ConfigureAwait(false);
+                            break;
+                        case FetchResultCode.Ok:
+                            topicHighWaterMark = fetchResult.Response.HighWaterMark;
+                            var response = fetchResult.Response;
+                            // go ahead and begin the next fetch
+                            fetchResultTask = FetchAsync(connection, topicName, partitionId, nextOffset, toOffsetExcl, cancel, bufferSizeHighWatermark, topicHighWaterMark).ConfigureAwait(false);
+                            if (response.Messages.Count > 0)
+                            {
+                                nextOffset = response.Messages[response.Messages.Count - 1].Meta.Offset + 1;
+                                try
+                                {
+                                    onNext(response);
+                                }
+                                catch (Exception e)
+                                {
+                                    // TODO: handle this a better way.  We absolutely need to grab the developer's attention, but we don't want to cause the stream to end
+                                    Console.WriteLine("***********************************************************************");
+                                    Console.WriteLine("Warning: an observer threw an exception that it did not catch: {0}", e);
+                                    Console.WriteLine("***********************************************************************");
+                                }
+                                cursor.NextOffset = nextOffset;
+                            }
+                            break;
+                        case FetchResultCode.RefreshAndRetry:
+                            return false;
+                        case FetchResultCode.End:
+                            if (fetchResult.Exception != null)
+                                onError(fetchResult.Exception);
+                            else
+                                onComplete();
+                            return true;
+                    }
                 }
+            }
+            finally
+            {
+                // abort the fetch
+                abort.Cancel();
+            }
+        }
 
-                //build a fetch request for partition at offset
-                var fetch = new Fetch
-                {
-                    Topic = topicName,
-                    PartitionId = partitionId,
-                    Offset = cursor.NextOffset,
-                    MaxBytes = bufferSizeHighWatermark,
-                };
+        /// <summary>
+        /// If this returns Ok then response contains the response
+        /// If this returns FetchAndRetry then exception might contain a reason which you can log, but you should refresh the broker information and call this again
+        /// If this returns End then exception might contain a reason why it ended, if not, it's just complete.
+        /// </summary>
+        /// <param name="connection"></param>
+        /// <param name="topicName"></param>
+        /// <param name="partitionId"></param>
+        /// <param name="cursor"></param>
+        /// <param name="toOffsetExcl"></param>
+        /// <param name="cancel"></param>
+        /// <param name="bufferSizeHighWatermark"></param>
+        /// <param name="topicHighWaterMark"></param>
+        /// <param name="response"></param>
+        /// <param name="exception"></param>
+        /// <returns></returns>
+        private static async Task<FetchResult> FetchAsync(IKafkaConnection connection, string topicName, int partitionId, long startOffset, long toOffsetExcl, CancellationToken cancel, int bufferSizeHighWatermark, long topicHighWaterMark)
+        {
+            if ((toOffsetExcl == ENDOFTOPIC && startOffset == topicHighWaterMark) || (toOffsetExcl > 0 && startOffset >= toOffsetExcl))
+            {
+                return new FetchResult(FetchResultCode.End, null, null);
+            }
 
-                var fetches = new List<Fetch> { fetch };
+            //build a fetch request for partition at offset
+            var fetch = new Fetch
+            {
+                Topic = topicName,
+                PartitionId = partitionId,
+                Offset = startOffset,
+                MaxBytes = bufferSizeHighWatermark,
+            };
 
-                var fetchRequest = new FetchRequest
-                {
-                    MaxWaitTime = int.MaxValue,
-                    // if we toOffset is ENDOFTOPIC, then we don't want to wait at the end of the topic
-                    // but if topicHighWaterMark is -1, then we don't know if there is any data to read yet
-                    // So if both of these are true, don't wait for any data
-                    MinBytes = (toOffsetExcl == ENDOFTOPIC && topicHighWaterMark == -1) ? 0 : 1,
-                    Fetches = fetches
-                };
+            var fetches = new List<Fetch> { fetch };
 
-                List<FetchResponse> responses;
-                try
-                {
-                    responses = await connection.SendAsync(fetchRequest, cancel).ConfigureAwait(false);
-                }
-                catch (OperationCanceledException e)
-                {
-                    onError(e);
-                    return true;
-                }
-                catch (Exception)
-                {
-                    return false;
-                }
+            var fetchRequest = new FetchRequest
+            {
+                MaxWaitTime = int.MaxValue,
+                // if we toOffset is ENDOFTOPIC, then we don't want to wait at the end of the topic
+                // but if topicHighWaterMark is -1, then we don't know if there is any data to read yet
+                // So if both of these are true, don't wait for any data
+                MinBytes = (toOffsetExcl == ENDOFTOPIC && topicHighWaterMark == -1) ? 0 : 1,
+                Fetches = fetches
+            };
 
-                if (responses.Count == 0) // something went wrong, refresh the route before trying again
-                    return false;
+            List<FetchResponse> responses;
+            try
+            {
+                responses = await connection.SendAsync(fetchRequest, cancel).ConfigureAwait(false);
+            }
+            catch (BufferUnderRunException)
+            {
+                return new FetchResult(FetchResultCode.IncreaseBufferAndRetry, null, null);
+            }
+            catch (OperationCanceledException e)
+            {
+                return new FetchResult(FetchResultCode.End, null, e);
+            }
+            catch (Exception e)
+            {
+                // TODO: warn... something went wrong and we're going to just refresh and retry
+                return new FetchResult(FetchResultCode.RefreshAndRetry, null, e);
+            }
 
-                var response = responses.First();
+            if (responses.Count == 0)
+            {
+                // something went wrong, refresh the route before trying again
+                // TODO: warn... something went wrong and we're going to just refresh and retry
+                return new FetchResult(FetchResultCode.RefreshAndRetry, null, null);
+            }
 
-                switch ((ErrorResponseCode)response.Error)
-                {
-                    case ErrorResponseCode.NoError:
-                        break;
-                    case ErrorResponseCode.OffsetOutOfRange:
-                        onError(new OffsetOutOfRangeException("FetchResponse indicated we requested an offset that is out of range.  Requested Offset:{0}", fetchRequest.Fetches[0].Offset) { FetchRequest = fetchRequest.Fetches[0] });
-                        return true;
-                    case ErrorResponseCode.BrokerNotAvailable:
-                    case ErrorResponseCode.ConsumerCoordinatorNotAvailableCode:
-                    case ErrorResponseCode.LeaderNotAvailable:
-                    case ErrorResponseCode.NotLeaderForPartition:
-                        return false;
-                    default:
-                        onError(new KafkaApplicationException("FetchResponse returned error condition.  ErrorCode:{0}", response.Error) { ErrorCode = response.Error });
-                        return true;
-                }
+            var response = responses.First();
 
-                topicHighWaterMark = response.HighWaterMark;
-
-                try
-                {
-                    onNext(response);
-                }
-                catch (Exception e)
-                {
-                    // TODO: handle this a better way.  We absolutely need to grab the developer's attention, but we don't want to cause the stream to end
-                    Console.WriteLine("***********************************************************************");
-                    Console.WriteLine("Warning: an observer threw an exception that it did not catch: {0}", e);
-                    Console.WriteLine("***********************************************************************");
-                }
-
-                if (response.Messages.Count > 0)
-                    cursor.NextOffset = response.Messages[response.Messages.Count - 1].Meta.Offset + 1;
-
+            switch ((ErrorResponseCode)response.Error)
+            {
+                case ErrorResponseCode.NoError:
+                    return new FetchResult(FetchResultCode.Ok, response, null);
+                case ErrorResponseCode.OffsetOutOfRange:
+                    return new FetchResult(FetchResultCode.End, null, new OffsetOutOfRangeException("FetchResponse indicated we requested an offset that is out of range.  Requested Offset:{0}", fetchRequest.Fetches[0].Offset) { FetchRequest = fetchRequest.Fetches[0] });
+                case ErrorResponseCode.BrokerNotAvailable:
+                case ErrorResponseCode.ConsumerCoordinatorNotAvailableCode:
+                case ErrorResponseCode.LeaderNotAvailable:
+                case ErrorResponseCode.NotLeaderForPartition:
+                    return new FetchResult(FetchResultCode.RefreshAndRetry, null, null);
+                default:
+                    return new FetchResult(FetchResultCode.End, null, new KafkaApplicationException("FetchResponse returned error condition.  ErrorCode:{0}", response.Error) { ErrorCode = response.Error });
             }
         }
 
