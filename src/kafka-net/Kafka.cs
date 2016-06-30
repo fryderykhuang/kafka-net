@@ -142,13 +142,13 @@ namespace KafkaNet
 
             private async Task RefreshRoutes()
             {
-                await router.RefreshTopicMetadataAsync();
-                await Connect();
+                await router.RefreshTopicMetadataAsync().ConfigureAwait(false);
+                await Connect().ConfigureAwait(false);
             }
 
             private async Task Connect()
             {
-                var route = await router.SelectBrokerRouteAsync(topicName, partitionId);
+                var route = await router.SelectBrokerRouteAsync(topicName, partitionId).ConfigureAwait(false);
                 connection = router.CloneConnectionForFetch(route.Connection);
             }
 
@@ -166,12 +166,12 @@ namespace KafkaNet
             var cursor = new Cursor { NextOffset = fromOffset };
             for (;;)
             {
-                var topics = await router.GetTopicMetadataAsync(topicName);
+                var topics = await router.GetTopicMetadataAsync(topicName).ConfigureAwait(false);
                 if (topics.Count <= 0)
                     throw new ApplicationException(string.Format("Unable to get metadata for topic:{0}.", topicName));
 
                 //make request and post to queue
-                var route = await router.SelectBrokerRouteAsync(topicName, partitionId);
+                var route = await router.SelectBrokerRouteAsync(topicName, partitionId).ConfigureAwait(false);
                 using (var connection = router.CloneConnectionForFetch(route.Connection))
                 {
                     bool end = await ConsumePartitionAsync(connection, topicName, partitionId, cursor, toOffsetExcl, onNext, onComplete, onError, cancel).ConfigureAwait(false);
@@ -179,7 +179,7 @@ namespace KafkaNet
                         break;
                 }
 
-                await router.RefreshTopicMetadataAsync(topicName);
+                await router.RefreshTopicMetadataAsync(topicName).ConfigureAwait(false);
             }
         }
 
@@ -342,7 +342,7 @@ namespace KafkaNet
 
         public static async Task<IKafkaConnection> ConnectAsync(BrokerRouter router, string topicName, int partitionId, TimeSpan? responseTimeoutMs = null)
         {
-            BrokerRoute route = await router.SelectBrokerRouteAsync(topicName, partitionId);
+            BrokerRoute route = await router.SelectBrokerRouteAsync(topicName, partitionId).ConfigureAwait(false);
             return router.CloneConnection(route.Connection, responseTimeoutMs ?? TimeSpan.MaxValue);
         }
 
@@ -371,7 +371,7 @@ namespace KafkaNet
                 TimeoutMS = (int)timeout.TotalMilliseconds,
                 TopicPayloads = payloads
             };
-            var response = await connection.SendAsync(request, cancel);
+            var response = await connection.SendAsync(request, cancel).ConfigureAwait(false);
             return response.ToArray();
         }
     }
