@@ -216,10 +216,12 @@ namespace KafkaNet
                             topicHighWaterMark = fetchResult.Response.HighWaterMark;
                             var response = fetchResult.Response;
                             // go ahead and begin the next fetch
-                            fetchResultTask = FetchAsync(connection, topicName, partitionId, nextOffset, toOffsetExcl, cancel, bufferSizeHighWatermark, topicHighWaterMark).ConfigureAwait(false);
-                            if (response.Messages.Count > 0)
-                            {
+                            var count = response.Messages.Count;
+                            if (count > 0)
                                 nextOffset = response.Messages[response.Messages.Count - 1].Meta.Offset + 1;
+                            fetchResultTask = FetchAsync(connection, topicName, partitionId, nextOffset, toOffsetExcl, cancel, bufferSizeHighWatermark, topicHighWaterMark).ConfigureAwait(false);
+                            if (count > 0)
+                            {
                                 try
                                 {
                                     onNext(response);
