@@ -1,7 +1,9 @@
-﻿using KafkaNet.Common;
+﻿using Divisions.Logging;
+using KafkaNet.Common;
 using KafkaNet.Protocol;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
@@ -14,6 +16,8 @@ namespace KafkaNet
     // TODO: Consider renaming this
     public static class Kafka
     {
+        private static readonly ILog Log = LogManager.GetLogger(typeof(Kafka));
+
         public const long INFINITY = long.MaxValue;
         public const long ENDOFTOPIC = -1L;
         /// <summary>
@@ -184,6 +188,7 @@ namespace KafkaNet
                     }
                     catch (Exception e)
                     {
+                        Log.Error("ConsumePartitionAsync failed unexpectedly, will attempt to recover", e);
                         await Task.Delay(exceptionBackoff);
                         exceptionBackoff = Math.Min(10000, exceptionBackoff * 2);
                     }
@@ -197,6 +202,12 @@ namespace KafkaNet
 
         private static async Task<bool> ConsumePartitionAsync(IKafkaConnection connection, string topicName, int partitionId, Cursor cursor, long toOffsetExcl, Action<FetchResponse> onNext, Action onComplete, Action<Exception> onError, CancellationToken cancel = default(CancellationToken))
         {
+            Log.DebugFormat("Consume partition {0}:{1} [{2}..{3}]",
+                topicName,
+                partitionId,
+                cursor.NextOffset,
+                toOffsetExcl == ENDOFTOPIC ? "end" : (toOffsetExcl == INFINITY ? "inf" :toOffsetExcl.ToString())
+                );
             var bufferSizeHighWatermark = 1024 * 5; // Default to 5 KB, this way we get messages with low latency at first, and if this isn't enough, we'll increase it later logarithmically
 
             // we don't know the topic high water mark yet, so initialize to -1
@@ -219,7 +230,7 @@ namespace KafkaNet
                     {
                         case FetchResultCode.IncreaseBufferAndRetry:
                             bufferSizeHighWatermark = Math.Min(bufferSizeHighWatermark * 2, BufferMax); // 5 MB max
-                            Console.WriteLine("Increasing buffer size to {0}", bufferSizeHighWatermark);
+                            Log.InfoFormat("Increasing buffer size to {0}", bufferSizeHighWatermark);
                             fetchResultTask = FetchAsync(connection, topicName, partitionId, nextOffset, toOffsetExcl, cancel, bufferSizeHighWatermark, topicHighWaterMark).ConfigureAwait(false);
                             break;
                         case FetchResultCode.Ok:
@@ -238,10 +249,7 @@ namespace KafkaNet
                                 }
                                 catch (Exception e)
                                 {
-                                    // TODO: handle this a better way.  We absolutely need to grab the developer's attention, but we don't want to cause the stream to end
-                                    Console.WriteLine("***********************************************************************");
-                                    Console.WriteLine("Warning: an observer threw an exception that it did not catch: {0}", e);
-                                    Console.WriteLine("***********************************************************************");
+                                    Log.Error("Observer did not handle an exception", e);
                                 }
                                 cursor.NextOffset = nextOffset;
                             }
@@ -284,9 +292,11 @@ namespace KafkaNet
         {
             if ((toOffsetExcl == ENDOFTOPIC && startOffset == topicHighWaterMark) || (toOffsetExcl > 0 && startOffset >= toOffsetExcl))
             {
+                Log.Debug("Fetch end of stream");
                 return new FetchResult(FetchResultCode.End, null, null);
             }
 
+            var sw = new Stopwatch();
             try
             {
 
@@ -316,26 +326,41 @@ namespace KafkaNet
                 {
                     try
                     {
+                        Log.DebugFormat("Fetch {0}:{1} [{2}..] (min/max: {3}/{4} bytes, wait: {5})",
+                            fetch.Topic,
+                            fetch.PartitionId,
+                            fetch.Offset,
+                            fetchRequest.MinBytes,
+                            fetch.MaxBytes,
+                            fetchRequest.MaxWaitTime
+                            );
+                        sw.Start();
                         responses = await connection.SendAsync(fetchRequest, cancel).ConfigureAwait(false);
                         break;
                     }
                     catch (BufferUnderRunException)
                     {
+                        Log.Debug("Buffer underrun");
                         return new FetchResult(FetchResultCode.IncreaseBufferAndRetry, null, null);
                     }
                     catch (OperationCanceledException e)
                     {
+                        Log.Debug("Fetch canceled");
                         return new FetchResult(FetchResultCode.End, null, e);
                     }
                     catch (ResponseTimeoutException e)
                     {
+                        sw.Stop();
+                        Log.DebugFormat("({0}ms) Request timeout, will re-request", sw.ElapsedMilliseconds);
                     }
                     catch (ServerDisconnectedException e)
                     {
+                        Log.Debug("Lost connection to kafka broker", e);
                         return new FetchResult(FetchResultCode.RefreshAndRetry, null, e);
                     }
                     catch (Exception e)
                     {
+                        Log.Debug("Fetch error", e);
                         return new FetchResult(FetchResultCode.RefreshAndRetry, null, e);
                     }
                     finally
@@ -346,6 +371,7 @@ namespace KafkaNet
 
                 if (responses.Count == 0)
                 {
+                    Log.Warn("Empty response, something went wrong");
                     // something went wrong, refresh the route before trying again
                     return new FetchResult(FetchResultCode.RefreshAndRetry, null, null);
                 }
@@ -355,20 +381,25 @@ namespace KafkaNet
                 switch ((ErrorResponseCode)response.Error)
                 {
                     case ErrorResponseCode.NoError:
+                        Log.DebugFormat("Fetch: OK {0} msgs", response.Messages?.Count ?? 0);
                         return new FetchResult(FetchResultCode.Ok, response, null);
                     case ErrorResponseCode.OffsetOutOfRange:
+                        Log.Debug("Fetch: Out Of Range");
                         return new FetchResult(FetchResultCode.End, null, new OffsetOutOfRangeException("FetchResponse indicated we requested an offset that is out of range.  Requested Offset:{0}", fetchRequest.Fetches[0].Offset) { FetchRequest = fetchRequest.Fetches[0] });
                     case ErrorResponseCode.BrokerNotAvailable:
                     case ErrorResponseCode.ConsumerCoordinatorNotAvailableCode:
                     case ErrorResponseCode.LeaderNotAvailable:
                     case ErrorResponseCode.NotLeaderForPartition:
+                        Log.DebugFormat("Fetch: Retry code {0}", response.Error);
                         return new FetchResult(FetchResultCode.RefreshAndRetry, null, null);
                     default:
+                        Log.DebugFormat("Fetch: Error code {0}", response.Error);
                         return new FetchResult(FetchResultCode.End, null, new KafkaApplicationException("FetchResponse returned error condition.  ErrorCode:{0}", response.Error) { ErrorCode = response.Error });
                 }
             }
             finally
             {
+                Log.DebugFormat("({0}ms) Fetch completed", sw.ElapsedMilliseconds);
             }
         }
 

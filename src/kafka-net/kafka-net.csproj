@@ -123,6 +123,12 @@
   <ItemGroup>
     <Folder Include="lib\net45\" />
   </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\Divisions.Logging\Divisions.Logging.csproj">
+      <Project>{800e4ff5-9bd1-4946-92f8-e6dc368ea873}</Project>
+      <Name>Divisions.Logging</Name>
+    </ProjectReference>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.

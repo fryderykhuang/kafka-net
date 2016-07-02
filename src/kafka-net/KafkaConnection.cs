@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using KafkaNet.Common;
 using KafkaNet.Model;
 using KafkaNet.Protocol;
+using Divisions.Logging;
 
 namespace KafkaNet
 {
@@ -33,6 +34,8 @@ namespace KafkaNet
         private Task _connectionReadPollingTask = null;
         private int _ensureOneActiveReader;
         private int _correlationIdSeed;
+
+        private static readonly ILog Log = LogManager.GetLogger(typeof(KafkaConnection));
 
         /// <summary>
         /// Initializes a new instance of the KafkaConnection class.
@@ -182,7 +185,7 @@ namespace KafkaNet
                                 {
                                     //TODO being in sync with the byte order on read is important.  What happens if this exception causes us to be out of sync?
                                     //record exception and continue to scan for data.
-                                    _log.ErrorFormat("Exception occured in polling read thread.  Exception={0}", ex);
+                                    Log.ErrorFormat("Exception occured in polling read thread.  Exception={0}", ex);
                                 }
                             }
                         }
@@ -190,7 +193,7 @@ namespace KafkaNet
                     finally
                     {
                         Interlocked.Decrement(ref _ensureOneActiveReader);
-                        _log.DebugFormat("Closed down connection to: {0}", _client.Endpoint);
+                        Log.DebugFormat("Closed down connection to: {0}", _client.Endpoint);
                     }
                 });
         }
@@ -209,7 +212,7 @@ namespace KafkaNet
             }
             else
             {
-                _log.WarnFormat("Message response received with correlationId={0}, but did not exist in the request queue.", correlationId);
+                Log.WarnFormat("Message response received with correlationId={0}, but did not exist in the request queue.", correlationId);
             }
         }
 
