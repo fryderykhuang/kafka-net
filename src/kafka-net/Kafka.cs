@@ -164,6 +164,7 @@ namespace KafkaNet
             // This is the loop that continuously gets the broker for the selected topic and partition
             // Under normal conditions it runs only once, unless the broker situation changes
             var cursor = new Cursor { NextOffset = fromOffset };
+            var exceptionBackoff = 5;
             for (;;)
             {
                 var topics = await router.GetTopicMetadataAsync(topicName).ConfigureAwait(false);
@@ -174,9 +175,18 @@ namespace KafkaNet
                 var route = await router.SelectBrokerRouteAsync(topicName, partitionId).ConfigureAwait(false);
                 using (var connection = router.CloneConnectionForFetch(route.Connection))
                 {
-                    bool end = await ConsumePartitionAsync(connection, topicName, partitionId, cursor, toOffsetExcl, onNext, onComplete, onError, cancel).ConfigureAwait(false);
-                    if (end)
-                        break;
+                    try
+                    {
+                        bool end = await ConsumePartitionAsync(connection, topicName, partitionId, cursor, toOffsetExcl, onNext, onComplete, onError, cancel).ConfigureAwait(false);
+                        exceptionBackoff = 5;
+                        if (end)
+                            break;
+                    }
+                    catch (Exception e)
+                    {
+                        await Task.Delay(exceptionBackoff);
+                        exceptionBackoff = Math.Min(10000, exceptionBackoff * 2);
+                    }
                 }
 
                 await router.RefreshTopicMetadataAsync(topicName).ConfigureAwait(false);
@@ -277,68 +287,88 @@ namespace KafkaNet
                 return new FetchResult(FetchResultCode.End, null, null);
             }
 
-            //build a fetch request for partition at offset
-            var fetch = new Fetch
-            {
-                Topic = topicName,
-                PartitionId = partitionId,
-                Offset = startOffset,
-                MaxBytes = bufferSizeHighWatermark,
-            };
-
-            var fetches = new List<Fetch> { fetch };
-
-            var fetchRequest = new FetchRequest
-            {
-                MaxWaitTime = int.MaxValue,
-                // if we toOffset is ENDOFTOPIC, then we don't want to wait at the end of the topic
-                // but if topicHighWaterMark is -1, then we don't know if there is any data to read yet
-                // So if both of these are true, don't wait for any data
-                MinBytes = (toOffsetExcl == ENDOFTOPIC && topicHighWaterMark == -1) ? 0 : 1,
-                Fetches = fetches
-            };
-
-            List<FetchResponse> responses;
             try
             {
-                responses = await connection.SendAsync(fetchRequest, cancel).ConfigureAwait(false);
-            }
-            catch (BufferUnderRunException)
-            {
-                return new FetchResult(FetchResultCode.IncreaseBufferAndRetry, null, null);
-            }
-            catch (OperationCanceledException e)
-            {
-                return new FetchResult(FetchResultCode.End, null, e);
-            }
-            catch (Exception e)
-            {
-                // TODO: warn... something went wrong and we're going to just refresh and retry
-                return new FetchResult(FetchResultCode.RefreshAndRetry, null, e);
-            }
 
-            if (responses.Count == 0)
-            {
-                // something went wrong, refresh the route before trying again
-                // TODO: warn... something went wrong and we're going to just refresh and retry
-                return new FetchResult(FetchResultCode.RefreshAndRetry, null, null);
-            }
+                //build a fetch request for partition at offset
+                var fetch = new Fetch
+                {
+                    Topic = topicName,
+                    PartitionId = partitionId,
+                    Offset = startOffset,
+                    MaxBytes = bufferSizeHighWatermark,
+                };
 
-            var response = responses.First();
+                var fetches = new List<Fetch> { fetch };
 
-            switch ((ErrorResponseCode)response.Error)
-            {
-                case ErrorResponseCode.NoError:
-                    return new FetchResult(FetchResultCode.Ok, response, null);
-                case ErrorResponseCode.OffsetOutOfRange:
-                    return new FetchResult(FetchResultCode.End, null, new OffsetOutOfRangeException("FetchResponse indicated we requested an offset that is out of range.  Requested Offset:{0}", fetchRequest.Fetches[0].Offset) { FetchRequest = fetchRequest.Fetches[0] });
-                case ErrorResponseCode.BrokerNotAvailable:
-                case ErrorResponseCode.ConsumerCoordinatorNotAvailableCode:
-                case ErrorResponseCode.LeaderNotAvailable:
-                case ErrorResponseCode.NotLeaderForPartition:
+                var fetchRequest = new FetchRequest
+                {
+                    MaxWaitTime = 595000, // the default max connection idle time is 600000, so we'll timeout just before that
+                    // if we toOffset is ENDOFTOPIC, then we don't want to wait at the end of the topic
+                    // but if topicHighWaterMark is -1, then we don't know if there is any data to read yet
+                    // So if both of these are true, don't wait for any data
+                    MinBytes = (toOffsetExcl == ENDOFTOPIC && topicHighWaterMark == -1) ? 0 : 1,
+                    Fetches = fetches
+                };
+
+                List<FetchResponse> responses;
+                for (;;)
+                {
+                    try
+                    {
+                        responses = await connection.SendAsync(fetchRequest, cancel).ConfigureAwait(false);
+                        break;
+                    }
+                    catch (BufferUnderRunException)
+                    {
+                        return new FetchResult(FetchResultCode.IncreaseBufferAndRetry, null, null);
+                    }
+                    catch (OperationCanceledException e)
+                    {
+                        return new FetchResult(FetchResultCode.End, null, e);
+                    }
+                    catch (ResponseTimeoutException e)
+                    {
+                    }
+                    catch (ServerDisconnectedException e)
+                    {
+                        return new FetchResult(FetchResultCode.RefreshAndRetry, null, e);
+                    }
+                    catch (Exception e)
+                    {
+                        return new FetchResult(FetchResultCode.RefreshAndRetry, null, e);
+                    }
+                    finally
+                    {
+                        sw.Stop();
+                    }
+                }
+
+                if (responses.Count == 0)
+                {
+                    // something went wrong, refresh the route before trying again
                     return new FetchResult(FetchResultCode.RefreshAndRetry, null, null);
-                default:
-                    return new FetchResult(FetchResultCode.End, null, new KafkaApplicationException("FetchResponse returned error condition.  ErrorCode:{0}", response.Error) { ErrorCode = response.Error });
+                }
+
+                var response = responses.First();
+
+                switch ((ErrorResponseCode)response.Error)
+                {
+                    case ErrorResponseCode.NoError:
+                        return new FetchResult(FetchResultCode.Ok, response, null);
+                    case ErrorResponseCode.OffsetOutOfRange:
+                        return new FetchResult(FetchResultCode.End, null, new OffsetOutOfRangeException("FetchResponse indicated we requested an offset that is out of range.  Requested Offset:{0}", fetchRequest.Fetches[0].Offset) { FetchRequest = fetchRequest.Fetches[0] });
+                    case ErrorResponseCode.BrokerNotAvailable:
+                    case ErrorResponseCode.ConsumerCoordinatorNotAvailableCode:
+                    case ErrorResponseCode.LeaderNotAvailable:
+                    case ErrorResponseCode.NotLeaderForPartition:
+                        return new FetchResult(FetchResultCode.RefreshAndRetry, null, null);
+                    default:
+                        return new FetchResult(FetchResultCode.End, null, new KafkaApplicationException("FetchResponse returned error condition.  ErrorCode:{0}", response.Error) { ErrorCode = response.Error });
+                }
+            }
+            finally
+            {
             }
         }
 
