@@ -26,7 +26,6 @@ namespace KafkaNet
 
         private readonly ConcurrentDictionary<int, AsyncRequestItem> _requestIndex = new ConcurrentDictionary<int, AsyncRequestItem>();
         private readonly TimeSpan _responseTimeoutMS;
-        private readonly IKafkaLog _log;
         private readonly IKafkaTcpSocket _client;
         private readonly CancellationTokenSource _disposeToken = new CancellationTokenSource();
 
@@ -46,7 +45,6 @@ namespace KafkaNet
         public KafkaConnection(IKafkaTcpSocket client, TimeSpan? responseTimeoutMs = null, IKafkaLog log = null)
         {
             _client = client;
-            _log = log ?? new DefaultTraceLog();
             _responseTimeoutMS = responseTimeoutMs ?? TimeSpan.FromMilliseconds(DefaultResponseTimeoutMs);
 
             StartReadStreamPoller();
@@ -83,10 +81,13 @@ namespace KafkaNet
             //if response is expected, register a receive data task and send request
             if (request.ExpectResponse)
             {
+                Log.TraceFormat("Sending {0} request with id {1}", request.ApiKey.ToString(), request.CorrelationId);
+
                 var correlationId = request.CorrelationId;
                 using (var asyncRequest = new AsyncRequestItem(request.CorrelationId))
                 using (var registration = cancel.Register(() =>
                 {
+                    Log.TraceFormat("Canceled {0}", request.CorrelationId);
                     AsyncRequestItem removed;
                     _requestIndex.TryRemove(correlationId, out removed);
                     asyncRequest.ReceiveTask.TrySetCanceled();
@@ -95,11 +96,13 @@ namespace KafkaNet
 
                     try
                     {
+                        var timeoutMs = (request as FetchRequest)?.MaxWaitTime;
+                        var timeout = timeoutMs.HasValue ? (timeoutMs == int.MaxValue ? TimeSpan.MaxValue : TimeSpan.FromMilliseconds(timeoutMs.Value + 4000)) : _responseTimeoutMS;
                         AddAsyncRequestItemToResponseQueue(asyncRequest);
                         await _client.WriteAsync(request.Encode(), cancel)
                             .ContinueWith(t =>
                             {
-                                asyncRequest.MarkRequestAsSent(t.Exception, _responseTimeoutMS, TriggerMessageTimeout);
+                                asyncRequest.MarkRequestAsSent(t.Exception, timeout, TriggerMessageTimeout);
                             })
                             .ConfigureAwait(false);
                     }
@@ -156,11 +159,11 @@ namespace KafkaNet
                         {
                             try
                             {
-                                _log.DebugFormat("Awaiting message from: {0}", _client.Endpoint);
+                                Log.TraceFormat("Awaiting message from: {0}", _client.Endpoint);
                                 var messageSizeResult = await _client.ReadAsync(4, _disposeToken.Token).ConfigureAwait(false);
                                 var messageSize = messageSizeResult.ToInt32();
 
-                                _log.DebugFormat("Received message of size: {0} From: {1}", messageSize, _client.Endpoint);
+                                Log.TraceFormat("Received message of size: {0} From: {1}", messageSize, _client.Endpoint);
                                 var message = await _client.ReadAsync(messageSize, _disposeToken.Token).ConfigureAwait(false);
 
                                 CorrelatePayloadToRequest(message);
@@ -201,9 +204,11 @@ namespace KafkaNet
         private void CorrelatePayloadToRequest(byte[] payload)
         {
             var correlationId = payload.Take(4).ToArray().ToInt32();
+            Log.TraceFormat("Received response for {0}", correlationId);
             AsyncRequestItem asyncRequest;
             if (_requestIndex.TryRemove(correlationId, out asyncRequest))
             {
+                Log.TraceFormat("Located request for {0}", correlationId);
                 var receiveTask = asyncRequest.ReceiveTask;
                 Task.Run(() =>
                 {
