@@ -17,8 +17,10 @@ namespace KafkaNet.Statistics
 
         public static readonly IScheduledTimer HeartbeatTimer;
         private static readonly Gauges Gauges = new Gauges();
+#if ENABLE_STATISTICS
         private static readonly ConcurrentCircularBuffer<ProduceRequestStatistic> ProduceRequestStatistics = new ConcurrentCircularBuffer<ProduceRequestStatistic>(500);
         private static readonly ConcurrentCircularBuffer<NetworkWriteStatistic> CompletedNetworkWriteStatistics = new ConcurrentCircularBuffer<NetworkWriteStatistic>(500);
+#endif
         private static readonly ConcurrentDictionary<int, NetworkWriteStatistic> NetworkWriteQueuedIndex = new ConcurrentDictionary<int, NetworkWriteStatistic>();
 
         static StatisticsTracker()
@@ -34,16 +36,20 @@ namespace KafkaNet.Statistics
         {
             if (OnStatisticsHeartbeat != null)
             {
+#if ENABLE_STATISTICS
                 OnStatisticsHeartbeat(new StatisticsSummary(ProduceRequestStatistics.ToList(),
                     NetworkWriteQueuedIndex.Values.ToList(),
                     CompletedNetworkWriteStatistics.ToList(),
                     Gauges));
+#endif
             }
         }
 
         public static void RecordProduceRequest(int messageCount, int payloadBytes, int compressedBytes)
         {
+#if ENABLE_STATISTICS
             ProduceRequestStatistics.Enqueue(new ProduceRequestStatistic(messageCount, payloadBytes, compressedBytes));
+#endif
         }
 
         public static void IncrementGauge(StatisticGauge gauge)
@@ -95,7 +101,9 @@ namespace KafkaNet.Statistics
             if (NetworkWriteQueuedIndex.TryRemove(payload.CorrelationId, out stat))
             {
                 stat.SetCompleted(milliseconds, failed);
+#if ENABLE_STATISTICS
                 CompletedNetworkWriteStatistics.Enqueue(stat);
+#endif
             }
             Interlocked.Decrement(ref Gauges.QueuedWriteOperation);
         }
