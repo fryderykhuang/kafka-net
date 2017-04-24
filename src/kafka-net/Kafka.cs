@@ -198,7 +198,7 @@ namespace KafkaNet
             }
         }
 
-        const int BufferMax = 1024 * 1024 * 5;
+        const int BufferMax = 1024 * 1024 * 16;
 
         private static async Task<bool> ConsumePartitionAsync(IKafkaConnection connection, string topicName, int partitionId, Cursor cursor, long toOffsetExcl, Action<FetchResponse> onNext, Action onComplete, Action<Exception> onError, CancellationToken cancel = default(CancellationToken))
         {
@@ -208,7 +208,7 @@ namespace KafkaNet
                 cursor.NextOffset,
                 toOffsetExcl == ENDOFTOPIC ? "end" : (toOffsetExcl == INFINITY ? "inf" :toOffsetExcl.ToString())
                 );
-            var bufferSizeHighWatermark = 1024 * 5; // Default to 5 KB, this way we get messages with low latency at first, and if this isn't enough, we'll increase it later logarithmically
+            var bufferSizeHighWatermark = BufferMax;
 
             // we don't know the topic high water mark yet, so initialize to -1
             // when we make the first request, we won't set a minimum byte count so that if there are no messages at all, we still get a response
