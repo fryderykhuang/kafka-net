@@ -231,8 +231,7 @@ namespace KafkaNet
                 finally
                 {
                     _options.Log.DebugFormat("Consumer: Disabling polling task for topic: {0} on parition: {1}", topic, partitionId);
-                    Task tempTask;
-                    _partitionPollingIndex.TryRemove(partitionId, out tempTask);
+                    _partitionPollingIndex.TryRemove(partitionId, out Task tempTask);
                 }
             });
         }

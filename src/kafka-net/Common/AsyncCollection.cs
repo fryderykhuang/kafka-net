@@ -59,8 +59,7 @@ namespace KafkaNet.Common
 
         public T Pop()
         {
-            T data;
-            return TryTake(out data) ? data : default(T);
+            return TryTake(out T data) ? data : default(T);
         }
 
         public async Task<List<T>> TakeAsync(int count, TimeSpan timeout, CancellationToken token)
@@ -72,8 +71,7 @@ namespace KafkaNet.Common
             {
                 do
                 {
-                    T data;
-                    while (TryTake(out data))
+                    while (TryTake(out T data))
                     {
                         batch.Add(data);
                         Interlocked.Increment(ref _dataInBufferCount);
@@ -95,8 +93,7 @@ namespace KafkaNet.Common
 
         public void DrainAndApply(Action<T> appliedFunc)
         {
-            T data;
-            while (_queue.TryDequeue(out data))
+            while (_queue.TryDequeue(out T data))
             {
                 appliedFunc(data);
             }
@@ -106,8 +103,7 @@ namespace KafkaNet.Common
 
         public IEnumerable<T> Drain()
         {
-            T data;
-            while (_queue.TryDequeue(out data))
+            while (_queue.TryDequeue(out T data))
             {
                 yield return data;
             }

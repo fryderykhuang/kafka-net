@@ -195,8 +195,7 @@ namespace KafkaNet
 
         private Topic GetCachedTopic(string topic)
         {
-            Topic cachedTopic;
-            return _topicIndex.TryGetValue(topic, out cachedTopic) ? cachedTopic : null;
+            return _topicIndex.TryGetValue(topic, out Topic cachedTopic) ? cachedTopic : null;
         }
 
         private async Task<BrokerRoute> GetCachedRouteAsync(string topic, Partition partition)
@@ -217,8 +216,7 @@ namespace KafkaNet
 
         private BrokerRoute TryGetRouteFromCache(string topic, Partition partition)
         {
-            IKafkaConnection conn;
-            if (_brokerConnectionIndex.TryGetValue(partition.LeaderId, out conn))
+            if (_brokerConnectionIndex.TryGetValue(partition.LeaderId, out IKafkaConnection conn))
             {
                 return new BrokerRoute
                 {
@@ -244,8 +242,7 @@ namespace KafkaNet
             foreach (var broker in brokerEndpoints)
             {
                 //if the connection is in our default connection index already, remove it and assign it to the broker index.
-                IKafkaConnection connection;
-                if (_defaultConnectionIndex.TryRemove(broker.Endpoint, out connection))
+                if (_defaultConnectionIndex.TryRemove(broker.Endpoint, out IKafkaConnection connection))
                 {
                     UpsertConnectionToBrokerConnectionIndex(broker.Broker.BrokerId, connection);
                 }

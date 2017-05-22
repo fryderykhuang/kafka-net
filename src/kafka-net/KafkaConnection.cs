@@ -88,8 +88,7 @@ namespace KafkaNet
                 using (var registration = cancel.Register(() =>
                 {
                     Log.TraceFormat("Canceled {0}", request.CorrelationId);
-                    AsyncRequestItem removed;
-                    _requestIndex.TryRemove(correlationId, out removed);
+                    _requestIndex.TryRemove(correlationId, out AsyncRequestItem removed);
                     asyncRequest.ReceiveTask.TrySetCanceled();
                 }))
                 {
@@ -176,8 +175,7 @@ namespace KafkaNet
                                 // if the server has been disconnected, then all of our waiting requests will not succeed, so cancel them
                                 foreach (var id in _requestIndex.Keys.ToArray())
                                 {
-                                    AsyncRequestItem ari;
-                                    if (_requestIndex.TryRemove(id, out ari))
+                                    if (_requestIndex.TryRemove(id, out AsyncRequestItem ari))
                                         ari.ReceiveTask?.TrySetException(sde);
                                 }
                             }
@@ -205,8 +203,7 @@ namespace KafkaNet
         {
             var correlationId = payload.Take(4).ToArray().ToInt32();
             Log.TraceFormat("Received response for {0}", correlationId);
-            AsyncRequestItem asyncRequest;
-            if (_requestIndex.TryRemove(correlationId, out asyncRequest))
+            if (_requestIndex.TryRemove(correlationId, out AsyncRequestItem asyncRequest))
             {
                 Log.TraceFormat("Located request for {0}", correlationId);
                 var receiveTask = asyncRequest.ReceiveTask;
@@ -242,8 +239,7 @@ namespace KafkaNet
         {
             if (asyncRequestItem == null) return;
 
-            AsyncRequestItem request;
-            _requestIndex.TryRemove(asyncRequestItem.CorrelationId, out request); //just remove it from the index
+            _requestIndex.TryRemove(asyncRequestItem.CorrelationId, out AsyncRequestItem request); //just remove it from the index
 
             if (_disposeToken.IsCancellationRequested)
             {

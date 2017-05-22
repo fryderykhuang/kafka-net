@@ -97,8 +97,7 @@ namespace KafkaNet.Statistics
         {
             if (payload.TrackPayload == false) return;
 
-            NetworkWriteStatistic stat;
-            if (NetworkWriteQueuedIndex.TryRemove(payload.CorrelationId, out stat))
+            if (NetworkWriteQueuedIndex.TryRemove(payload.CorrelationId, out NetworkWriteStatistic stat))
             {
                 stat.SetCompleted(milliseconds, failed);
 #if ENABLE_STATISTICS
