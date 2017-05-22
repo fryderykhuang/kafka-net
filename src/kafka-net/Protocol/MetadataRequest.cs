@@ -59,9 +59,10 @@ namespace KafkaNet.Protocol
         {
             using (var stream = new BigEndianBinaryReader(data))
             {
-                var response = new MetadataResponse();
-                response.CorrelationId = stream.ReadInt32();
-
+                var response = new MetadataResponse()
+                {
+                    CorrelationId = stream.ReadInt32()
+                };
                 var brokerCount = stream.ReadInt32();
                 for (var i = 0; i < brokerCount; i++)
                 {
