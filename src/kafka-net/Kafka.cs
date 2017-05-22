@@ -348,7 +348,7 @@ namespace KafkaNet
                         Log.Debug("Fetch canceled");
                         return new FetchResult(FetchResultCode.End, null, e);
                     }
-                    catch (ResponseTimeoutException e)
+                    catch (ResponseTimeoutException)
                     {
                         sw.Stop();
                         Log.DebugFormat("({0}ms) Request timeout, will re-request", sw.ElapsedMilliseconds);
