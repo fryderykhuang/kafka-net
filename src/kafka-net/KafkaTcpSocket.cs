@@ -307,7 +307,7 @@ namespace KafkaNet
                     _client = await ReEstablishConnectionAsync().ConfigureAwait(false);
                 }
 
-                return _client == null ? null : _client.GetStream();
+                return _client?.GetStream();
             }
         }
 

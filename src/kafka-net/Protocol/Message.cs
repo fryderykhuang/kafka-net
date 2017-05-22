@@ -69,7 +69,7 @@ namespace KafkaNet.Protocol
         /// <param name="value">The main content data of this message.</param>
         public Message(string value, string key = null)
         {
-            Key = key == null ? null : key.ToBytes();
+            Key = key?.ToBytes();
             Value = value.ToBytes();
         }
 
