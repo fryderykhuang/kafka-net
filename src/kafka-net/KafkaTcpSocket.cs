@@ -147,7 +147,7 @@ namespace KafkaNet
 
                     if (ex is ServerDisconnectedException)
                     {
-                        if (OnServerDisconnected != null) OnServerDisconnected();
+                        OnServerDisconnected?.Invoke();
                         _log.ErrorFormat(ex.Message);
                         continue;
                     }
@@ -204,12 +204,12 @@ namespace KafkaNet
                         readSize = readSize - bytesReceived;
                         var buffer = new byte[readSize];
 
-                        if (OnReadFromSocketAttempt != null) OnReadFromSocketAttempt(readSize);
+                        OnReadFromSocketAttempt?.Invoke(readSize);
 
                         bytesReceived = await netStream.ReadAsync(buffer, 0, readSize, readTask.CancellationToken)
                             .WithCancellation(readTask.CancellationToken).ConfigureAwait(false);
 
-                        if (OnBytesReceived != null) OnBytesReceived(bytesReceived);
+                        OnBytesReceived?.Invoke(bytesReceived);
 
                         if (bytesReceived <= 0)
                         {
@@ -271,7 +271,7 @@ namespace KafkaNet
                     sw.Restart();
                     StatisticsTracker.IncrementGauge(StatisticGauge.ActiveWriteOperation);
 
-                    if (OnWriteToSocketAttempt != null) OnWriteToSocketAttempt(sendTask.Payload);
+                    OnWriteToSocketAttempt?.Invoke(sendTask.Payload);
                     await netStream.WriteAsync(sendTask.Payload.Buffer, 0, sendTask.Payload.Buffer.Length).ConfigureAwait(false);
 
                     sendTask.Tcp.TrySetResult(sendTask.Payload);
@@ -327,7 +327,7 @@ namespace KafkaNet
             {
                 try
                 {
-                    if (OnReconnectionAttempt != null) OnReconnectionAttempt(attempts++);
+                    OnReconnectionAttempt?.Invoke(attempts++);
                     _client = new TcpClient();
                     await _client.ConnectAsync(_endpoint.Endpoint.Address, _endpoint.Endpoint.Port).ConfigureAwait(false);
                     _log.WarnFormat("Connection established to:{0}.", _endpoint);
