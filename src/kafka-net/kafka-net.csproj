@@ -1,140 +1,14 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
-<Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
-  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
-    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
-    <ProjectGuid>{1343EB68-55CB-4452-8386-24A9989DE1C0}</ProjectGuid>
+    <TargetFramework>net45</TargetFramework>
     <OutputType>Library</OutputType>
-    <AppDesignerFolder>Properties</AppDesignerFolder>
     <RootNamespace>KafkaNet</RootNamespace>
-    <AssemblyName>kafka-net</AssemblyName>
-    <TargetFrameworkVersion>v4.5</TargetFrameworkVersion>
-    <FileAlignment>512</FileAlignment>
-    <TargetFrameworkProfile />
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
-    <DebugSymbols>true</DebugSymbols>
-    <DebugType>full</DebugType>
-    <Optimize>false</Optimize>
-    <OutputPath>bin\Debug\</OutputPath>
-    <DefineConstants>DEBUG;TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
-  </PropertyGroup>
-  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
-    <DebugType>pdbonly</DebugType>
-    <Optimize>true</Optimize>
-    <OutputPath>bin\Release\</OutputPath>
-    <DefineConstants>TRACE</DefineConstants>
-    <ErrorReport>prompt</ErrorReport>
-    <WarningLevel>4</WarningLevel>
-    <Prefer32Bit>false</Prefer32Bit>
   </PropertyGroup>
   <ItemGroup>
-    <Reference Include="Nito.AsyncEx, Version=3.0.1.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\..\packages\Nito.AsyncEx.3.0.1\lib\net45\Nito.AsyncEx.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="Nito.AsyncEx.Concurrent, Version=3.0.1.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\..\packages\Nito.AsyncEx.3.0.1\lib\net45\Nito.AsyncEx.Concurrent.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="Nito.AsyncEx.Enlightenment, Version=3.0.1.0, Culture=neutral, processorArchitecture=MSIL">
-      <HintPath>..\..\..\packages\Nito.AsyncEx.3.0.1\lib\net45\Nito.AsyncEx.Enlightenment.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System" />
-    <Reference Include="System.Core" />
-    <Reference Include="System.Reactive.Core, Version=3.0.1000.0, Culture=neutral, PublicKeyToken=94bc3704cddfc263, processorArchitecture=MSIL">
-      <HintPath>..\..\..\packages\System.Reactive.Core.3.1.1\lib\net45\System.Reactive.Core.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Reactive.Interfaces, Version=3.0.1000.0, Culture=neutral, PublicKeyToken=94bc3704cddfc263, processorArchitecture=MSIL">
-      <HintPath>..\..\..\packages\System.Reactive.Interfaces.3.1.1\lib\net45\System.Reactive.Interfaces.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Reactive.Linq, Version=3.0.1000.0, Culture=neutral, PublicKeyToken=94bc3704cddfc263, processorArchitecture=MSIL">
-      <HintPath>..\..\..\packages\System.Reactive.Linq.3.1.1\lib\net45\System.Reactive.Linq.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="System.Xml.Linq" />
-    <Reference Include="System.Data.DataSetExtensions" />
-    <Reference Include="Microsoft.CSharp" />
-    <Reference Include="System.Data" />
-    <Reference Include="System.Xml" />
+    <PackageReference Include="Nito.AsyncEx" Version="3.0.1" />
+    <PackageReference Include="System.Reactive.Core" Version="3.1.1" />
+    <PackageReference Include="System.Reactive.Interfaces" Version="3.1.1" />
+    <PackageReference Include="System.Reactive.Linq" Version="3.1.1" />
+    <ProjectReference Include="..\..\..\Divisions.Logging\Divisions.Logging.csproj" />
   </ItemGroup>
-  <ItemGroup>
-    <Compile Include="Kafka.cs" />
-    <Compile Include="Common\AsyncLock.cs" />
-    <Compile Include="Common\BigEndianBinaryReader.cs" />
-    <Compile Include="Common\BigEndianBinaryWriter.cs" />
-    <Compile Include="Common\AsyncManualResetEvent.cs" />
-    <Compile Include="Common\AsyncCollection.cs" />
-    <Compile Include="Common\ConcurrentCircularBuffer.cs" />
-    <Compile Include="Common\KafkaMessagePacker.cs" />
-    <Compile Include="SimpleConsumer.cs" />
-    <Compile Include="Statistics\StatisticsTracker.cs" />
-    <Compile Include="Default\ConsoleLog.cs" />
-    <Compile Include="Default\DefaultKafkaConnectionFactory.cs" />
-    <Compile Include="Interfaces\IMetadataQueries.cs" />
-    <Compile Include="Interfaces\IKafkaTcpSocket.cs" />
-    <Compile Include="Model\BrokerRoute.cs" />
-    <Compile Include="Common\ScheduledTimer.cs" />
-    <Compile Include="Consumer.cs" />
-    <Compile Include="Interfaces\IKafkaConnection.cs" />
-    <Compile Include="Interfaces\IBrokerRouter.cs" />
-    <Compile Include="MetadataQueries.cs" />
-    <Compile Include="Model\ConsumerOptions.cs" />
-    <Compile Include="Default\DefaultPartitionSelector.cs" />
-    <Compile Include="Interfaces\IKafkaLog.cs" />
-    <Compile Include="Interfaces\IPartitionSelector.cs" />
-    <Compile Include="BrokerRouter.cs" />
-    <Compile Include="Model\KafkaEndpoint.cs" />
-    <Compile Include="KafkaMetadataProvider.cs" />
-    <Compile Include="Protocol\Broker.cs" />
-    <Compile Include="Common\Crc32Provider.cs" />
-    <Compile Include="Interfaces\IKafkaConnectionFactory.cs" />
-    <Compile Include="Producer.cs" />
-    <Compile Include="KafkaConnection.cs" />
-    <Compile Include="Common\Extensions.cs" />
-    <Compile Include="Model\KafkaOptions.cs" />
-    <Compile Include="Protocol\ConsumerMetadataRequest.cs" />
-    <Compile Include="Protocol\OffsetFetchRequest.cs" />
-    <Compile Include="Protocol\Protocol.cs" />
-    <Compile Include="Protocol\BaseRequest.cs" />
-    <Compile Include="Interfaces\IKafkaRequest.cs" />
-    <Compile Include="Protocol\FetchRequest.cs" />
-    <Compile Include="Protocol\Message.cs" />
-    <Compile Include="Properties\AssemblyInfo.cs" />
-    <Compile Include="Protocol\Topic.cs" />
-    <Compile Include="Protocol\MetadataRequest.cs" />
-    <Compile Include="Protocol\OffsetCommitRequest.cs" />
-    <Compile Include="Protocol\OffsetRequest.cs" />
-    <Compile Include="Protocol\ProduceRequest.cs" />
-    <Compile Include="Default\DefaultTraceLog.cs" />
-    <Compile Include="KafkaTcpSocket.cs" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="kafka-net.nuspec" />
-    <None Include="packages.config" />
-  </ItemGroup>
-  <ItemGroup>
-    <Folder Include="lib\net45\" />
-  </ItemGroup>
-  <ItemGroup>
-    <ProjectReference Include="..\..\..\Divisions.Logging\Divisions.Logging.csproj">
-      <Project>{800e4ff5-9bd1-4946-92f8-e6dc368ea873}</Project>
-      <Name>Divisions.Logging</Name>
-    </ProjectReference>
-  </ItemGroup>
-  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
-  </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>
